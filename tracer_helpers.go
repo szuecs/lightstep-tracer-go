@@ -1,19 +1,19 @@
 package lightstep
 
 import (
-	"fmt"
-	"reflect"
-
 	"golang.org/x/net/context"
 
 	opentracing "github.com/opentracing/opentracing-go"
 )
 
+var logError = NewLogOnError()
+
 // Flush forces a synchronous Flush.
 func Flush(ctx context.Context, tracer opentracing.Tracer) {
 	lsTracer, ok := tracer.(Tracer)
 	if !ok {
-		maybeLogError(newErrNotLisghtepTracer(tracer), true)
+		logError(newErrNotLisghtepTracer(tracer))
+		return
 	}
 	lsTracer.Flush(ctx)
 }
@@ -22,7 +22,8 @@ func Flush(ctx context.Context, tracer opentracing.Tracer) {
 func Close(ctx context.Context, tracer opentracing.Tracer) {
 	lsTracer, ok := tracer.(Tracer)
 	if !ok {
-		maybeLogError(newErrNotLisghtepTracer(tracer), true)
+		logError(newErrNotLisghtepTracer(tracer))
+		return
 	}
 	lsTracer.Close(ctx)
 }
@@ -57,8 +58,4 @@ func CloseTracer(tracer opentracing.Tracer) error {
 
 	lsTracer.Close(context.Background())
 	return nil
-}
-
-func newErrNotLisghtepTracer(tracer opentracing.Tracer) error {
-	return fmt.Errorf("Not a LightStep Tracer type: %v", reflect.TypeOf(tracer))
 }

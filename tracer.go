@@ -198,14 +198,15 @@ func (t *tracerImpl) Close(ctx context.Context) {
 // RecordSpan records a finished Span.
 func (t *tracerImpl) RecordSpan(raw RawSpan) {
 	t.lock.Lock()
-	defer t.lock.Unlock()
 
 	// Early-out for disabled runtimes
 	if t.disabled {
+		t.lock.Unlock()
 		return
 	}
 
 	t.buffer.addSpan(raw)
+	t.lock.Unlock()
 
 	if t.opts.Recorder != nil {
 		t.opts.Recorder.RecordSpan(raw)
@@ -227,17 +228,20 @@ func (t *tracerImpl) Flush(ctx context.Context) {
 	defer cancel()
 	resp, err := t.client.Report(ctx, &t.flushing)
 
-	if err == nil && len(resp.GetErrors()) > 0 {
-		// These should never occur, since this library should understand what
-		// makes for valid logs and spans, but just in case, log it anyway.
-		for _, err := range resp.GetErrors() {
-			t.onError(fmt.Errorf("Remote report returned error: %s", err))
-		}
-	} else {
-		maybeLogInfof("Report: resp=%v, err=%v", t.opts.Verbose, resp, err)
+	respErrs := resp.GetErrors()
+	if err == nil && len(respErrs) > 0 {
+		err = respErrs[0]
 	}
 
-	t.postFlush(resp, err)
+	t.postFlush(err)
+
+	if resp.Disable() {
+		t.Disable()
+	}
+
+	if err != nil {
+		t.onError(err)
+	}
 }
 
 func (t *tracerImpl) preFlush() error {
@@ -245,11 +249,11 @@ func (t *tracerImpl) preFlush() error {
 	defer t.lock.Unlock()
 
 	if t.disabled {
-		return errTracerDisabled
+		return newDisabledError(ErrFlushingWhenDisabled)
 	}
 
 	if t.conn == nil {
-		return errConnectionWasClosed
+		return newDisconnectedError(ErrFlushingWhenClosed)
 	}
 
 	now := time.Now()
@@ -261,26 +265,23 @@ func (t *tracerImpl) preFlush() error {
 	return nil
 }
 
-func (t *tracerImpl) postFlush(resp collectorResponse, err error) {
-	var droppedSent int64
+func (t *tracerImpl) postFlush(err error) {
 	t.lock.Lock()
 	defer t.lock.Unlock()
+
 	t.reportInFlight = false
 	if err != nil {
-		t.onError(err)
 		// Restore the records that did not get sent correctly
 		t.buffer.mergeFrom(&t.flushing)
-	} else {
-		droppedSent = t.flushing.droppedSpanCount
-		t.flushing.clear()
-
-		if resp.Disable() {
-			t.Disable()
-		}
+		return
 	}
+
+	//
+	droppedSent := t.flushing.droppedSpanCount
 	if droppedSent != 0 {
 		maybeLogInfof("client reported %d dropped spans", t.opts.Verbose, droppedSent)
 	}
+	t.flushing.clear()
 }
 
 func (t *tracerImpl) Disable() {
@@ -298,7 +299,6 @@ func (t *tracerImpl) Disable() {
 }
 
 func (t *tracerImpl) onError(err error) {
-	maybeLogError(err, t.opts.Verbose)
 	if t.opts.OnError != nil {
 		t.opts.OnError(err)
 	}

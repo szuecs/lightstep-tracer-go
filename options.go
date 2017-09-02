@@ -130,7 +130,10 @@ type Options struct {
 
 	ReconnectPeriod time.Duration `yaml:"reconnect_period"`
 
-	// Handle async errors
+  // OnError handler receives errors as they occur. OnError is called synchronously, 
+  // do not block in your handler as it will interfere with the tracer. If no 
+  // OnError is provided, LogOnceOnError (or LogOnError if Verbose is set) is 
+  // used by default.
 	OnError func(error)
 
 	// a hook for recieving finished span events
@@ -147,6 +150,7 @@ func (opts *Options) Initialize() error {
 	if err != nil {
 		return err
 	}
+
 	// Note: opts is a copy of the user's data, ok to modify.
 	if opts.MaxBufferedSpans == 0 {
 		opts.MaxBufferedSpans = DefaultMaxSpans
@@ -174,6 +178,13 @@ func (opts *Options) Initialize() error {
 	}
 	if opts.Tags == nil {
 		opts.Tags = map[string]interface{}{}
+	}
+	if opts.OnError == nil {
+		if opts.Verbose {
+			opts.OnError = NewLogOnError()
+		} else {
+			opts.OnError = NewLogOnceOnError()
+		}
 	}
 
 	// Set some default attributes if not found in options
