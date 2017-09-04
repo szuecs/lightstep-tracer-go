@@ -230,7 +230,7 @@ func (t *tracerImpl) Flush(ctx context.Context) {
 
 	respErrs := resp.GetErrors()
 	if err == nil && len(respErrs) > 0 {
-		err = respErrs[0]
+		err = fmt.Errorf(respErrs[0])
 	}
 
 	t.postFlush(err)
@@ -253,7 +253,7 @@ func (t *tracerImpl) preFlush() error {
 	}
 
 	if t.conn == nil {
-		return newDisconnectedError(ErrFlushingWhenClosed)
+		return newClosedError(ErrFlushingWhenClosed)
 	}
 
 	now := time.Now()

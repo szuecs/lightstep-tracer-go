@@ -1,11 +1,129 @@
 package lightstep
 
-import "fmt"
+import (
+	"fmt"
+	"log"
+	"reflect"
+	"sync"
 
-var (
-	errConnectionWasClosed = fmt.Errorf("the connection was closed")
-	errTracerDisabled      = fmt.Errorf("tracer is disabled; aborting Flush()")
+	opentracing "github.com/opentracing/opentracing-go"
 )
+
+// Flushing Errors
+const (
+	ErrFlushingWhenClosed   = "LS Tracer cannot Flush, the tracer is closed."
+	ErrFlushingWhenDisabled = "LS Tracer cannot Flush, the tracer is disabled."
+)
+
+/*
+	Error Types
+*/
+
+type ClosedError interface {
+	Closed()
+	Error() string
+}
+
+type DisabledError interface {
+	Disabled()
+	Error() string
+}
+
+type DisconnectedError interface {
+	Disconnected()
+	Error() string
+}
+
+type DroppedSpansError interface {
+	DroppedSpans() int
+	Error() string
+}
+
+type NestedError interface {
+	Nested() error
+	Error() string
+}
+
+type nestedError struct {
+	err error
+}
+
+func newNestedError(err error) NestedError {
+	return nestedError{err: err}
+}
+
+func (e nestedError) Nested() error {
+	return e.err
+}
+
+func (e nestedError) Error() string {
+	return e.err.Error()
+}
+
+type closedError string
+
+func newClosedError(msg string) ClosedError {
+	return closedError(msg)
+}
+
+func (e closedError) Closed() {
+}
+
+func (e closedError) Error() string {
+	return string(e)
+}
+
+type disabledError string
+
+func newDisabledError(msg string) DisabledError {
+	return disabledError(msg)
+}
+
+func (e disabledError) Disabled() {
+}
+
+func (e disabledError) Error() string {
+	return string(e)
+}
+
+type disconnectedError nestedError
+
+func newDisconnectedError(err error) DisconnectedError {
+	return disconnectedError{err: err}
+}
+
+func (e disconnectedError) Disconnected() {
+}
+
+func (e disconnectedError) Nested() error {
+	return e.err
+}
+
+func (e disconnectedError) Error() string {
+	return e.err.Error()
+}
+
+type droppedSpansError struct {
+	droppedSpans int
+}
+
+func newDroppedSpansError(droppedSpans int) DroppedSpansError {
+	return &droppedSpansError{droppedSpans: droppedSpans}
+}
+
+func (err *droppedSpansError) DroppedSpans() int {
+	return err.droppedSpans
+}
+
+func (err *droppedSpansError) Error() string {
+	return fmt.Sprintf("client reported %d dropped spans", err.droppedSpans)
+}
+
+// newErrNotLisghtepTracer returns a typecasting error
+func newErrNotLisghtepTracer(tracer opentracing.Tracer) error {
+	return fmt.Errorf("Not a LightStep Tracer type: %v", reflect.TypeOf(tracer))
+}
+
 /*
 	OnError Handlers
 */

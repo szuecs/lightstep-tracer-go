@@ -130,10 +130,12 @@ type Options struct {
 
 	ReconnectPeriod time.Duration `yaml:"reconnect_period"`
 
-  // OnError handler receives errors as they occur. OnError is called synchronously, 
-  // do not block in your handler as it will interfere with the tracer. If no 
-  // OnError is provided, LogOnceOnError (or LogOnError if Verbose is set) is 
-  // used by default.
+	/*
+		OnError handler receives errors as they occur. OnError is called synchronously
+		do not block in your handler as it will interfere with the tracer. If no
+		OnError is provided, LogOnceOnError (or LogOnError if Verbose is set) is
+		used by default.
+	*/
 	OnError func(error)
 
 	// a hook for recieving finished span events
