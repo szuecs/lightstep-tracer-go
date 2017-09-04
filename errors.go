@@ -33,3 +33,24 @@ func NewLogOnceOnError() func(error) {
 	logger := logOneError{}
 	return logger.OnError
 }
+
+// NewChannelOnError returns an OnError callback handler, and a channel that
+// produces the errors. When the channel buffer is full, subsequent errors will
+// be dropped. A buffer size of less than one is incorrect, and will be adjusted
+// to a buffer size of one.
+func NewChannelOnError(buffer int) (func(error), <-chan error) {
+	if buffer < 1 {
+		buffer = 1
+	}
+
+	errChan := make(chan error, buffer)
+
+	handler := func(err error) {
+		select {
+		case errChan <- err:
+		default:
+		}
+	}
+
+	return handler, errChan
+}
