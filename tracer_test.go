@@ -21,12 +21,8 @@ var _ = Describe("SpanRecorder", func() {
 
 	Describe("Flush", func() {
 		var fakeClient *cpbfakes.FakeCollectorServiceClient
-		var cancelch chan struct{}
-		var startTestch chan bool
 
 		BeforeEach(func() {
-			cancelch = make(chan struct{})
-			startTestch = make(chan bool)
 			fakeClient = new(cpbfakes.FakeCollectorServiceClient)
 			tracer = NewTracer(Options{
 				AccessToken: "YOU SHALL NOT PASS",
@@ -68,9 +64,14 @@ var _ = Describe("SpanRecorder", func() {
 		})
 
 		Context("when tracer is running normally", func() {
+			var cancelch chan struct{}
+			var startTestch chan bool
+
 			BeforeEach(func() {
 				fakeClient.ReportReturns(&cpb.ReportResponse{}, nil)
 				var once sync.Once
+				cancelch = make(chan struct{})
+				startTestch = make(chan bool)
 				fakeClient.ReportStub = func(ctx context.Context, req *cpb.ReportRequest, options ...grpc.CallOption) (*cpb.ReportResponse, error) {
 					once.Do(func() { startTestch <- true })
 					<-cancelch
