@@ -19,36 +19,36 @@ const (
 	Error Types
 */
 
-type ClosedError interface {
+type ErrClosed interface {
 	Closed()
-	Error() string
+	error
 }
 
-type DisabledError interface {
+type ErrDisabled interface {
 	Disabled()
-	Error() string
+	error
 }
 
-type DisconnectedError interface {
+type ErrDisconected interface {
 	Disconnected()
-	Error() string
+	error
 }
 
-type DroppedSpansError interface {
+type ErrDroppedSpans interface {
 	DroppedSpans() int
-	Error() string
+	error
 }
 
-type NestedError interface {
+type ErrNested interface {
 	Nested() error
-	Error() string
+	error
 }
 
 type nestedError struct {
 	err error
 }
 
-func newNestedError(err error) NestedError {
+func newErrNested(err error) ErrNested {
 	return nestedError{err: err}
 }
 
@@ -62,7 +62,7 @@ func (e nestedError) Error() string {
 
 type closedError string
 
-func newClosedError(msg string) ClosedError {
+func newErrClosed(msg string) ErrClosed {
 	return closedError(msg)
 }
 
@@ -75,7 +75,7 @@ func (e closedError) Error() string {
 
 type disabledError string
 
-func newDisabledError(msg string) DisabledError {
+func newErrDisabled(msg string) ErrDisabled {
 	return disabledError(msg)
 }
 
@@ -88,7 +88,7 @@ func (e disabledError) Error() string {
 
 type disconnectedError nestedError
 
-func newDisconnectedError(err error) DisconnectedError {
+func newErrDisconected(err error) ErrDisconected {
 	return disconnectedError{err: err}
 }
 
@@ -107,7 +107,7 @@ type droppedSpansError struct {
 	droppedSpans int
 }
 
-func newDroppedSpansError(droppedSpans int) DroppedSpansError {
+func newErrDroppedSpans(droppedSpans int) ErrDroppedSpans {
 	return &droppedSpansError{droppedSpans: droppedSpans}
 }
 

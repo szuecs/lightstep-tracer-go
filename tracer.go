@@ -249,11 +249,11 @@ func (t *tracerImpl) preFlush() error {
 	defer t.lock.Unlock()
 
 	if t.disabled {
-		return newDisabledError(ErrFlushingWhenDisabled)
+		return newErrDisabled(ErrFlushingWhenDisabled)
 	}
 
 	if t.conn == nil {
-		return newClosedError(ErrFlushingWhenClosed)
+		return newErrClosed(ErrFlushingWhenClosed)
 	}
 
 	now := time.Now()
