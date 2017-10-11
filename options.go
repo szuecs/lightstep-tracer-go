@@ -130,12 +130,6 @@ type Options struct {
 
 	ReconnectPeriod time.Duration `yaml:"reconnect_period"`
 
-	//	OnEvent handler receives events as they occur. OnEvent is called synchronously
-	//	do not block in your handler as it will interfere with the tracer. If no
-	//	OnEvent is provided, LogOnceOnError (or LogOnError if Verbose is set) is
-	//	used by default.
-	OnEvent func(Event)
-
 	// a hook for recieving finished span events
 	Recorder SpanRecorder `yaml:"-" json:"-"`
 
@@ -178,13 +172,6 @@ func (opts *Options) Initialize() error {
 	}
 	if opts.Tags == nil {
 		opts.Tags = map[string]interface{}{}
-	}
-	if opts.OnEvent == nil {
-		if opts.Verbose {
-			opts.OnEvent = NewOnEventLogger()
-		} else {
-			opts.OnEvent = NewOnEventLogOneError()
-		}
 	}
 
 	// Set some default attributes if not found in options

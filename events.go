@@ -6,24 +6,59 @@ import (
 	"log"
 	"reflect"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	opentracing "github.com/opentracing/opentracing-go"
 )
+
+func init() {
+	OnEvent(NewOnEventLogOneError())
+}
+
+var eventHandler atomic.Value
+var eventHandlerLock sync.Mutex
+
+// An OnEventHandler can be registered with OnEvent to
+type OnEventHandler func(Event)
+
+// onEvent is a thread-safe function for emiting tracer events.
+func onEvent(event Event) {
+	handler := eventHandler.Load().(OnEventHandler)
+	handler(event)
+}
+
+// OnEvent sets a global handler to receive tracer events as they occur. Events
+// may be emitted by the tracer, or by calls to static functions in this package.
+// It is suggested that you set your OnEvent handler before starting your tracer,
+// but it is safe to set a new handler at any time.
+//
+// OnEvent is called synchronously – do not block in your handler as it may interfere
+// with the tracer. If no OnEvent handler is provided, a LogOnceOnError handler
+// is used by default.
+//
+// NOTE: Event handling is for reporting purposes only. It is not intended as a
+// mechanism for controling or restarting the tracer. Connection issues, retry
+// logic, and other transient errors are handled internally by the tracer.
+func OnEvent(handler OnEventHandler) {
+	eventHandlerLock.Lock()
+	defer eventHandlerLock.Unlock()
+	eventHandler.Store(handler)
+}
 
 // Events are emitted by the LightStep tracer as a reporting mechanism. They are
 // handled by adding an OnEvent callback to the Options passed to NewTracer. Events
 // may be cast to specific event types in order access additional information.
 //
 // NOTE: To ensure that events can be accurately identified, each event type contains
-// a sentiel method matching the name of the type. This method is a no-op, it is only used
+// a sentinel method matching the name of the type. This method is a no-op, it is only used
 // for type coersion.
 type Event interface {
 	Event()
 	String() string
 }
 
-// The ErrorEvent type can be used to filter events for errors. The `Err` method
+// The ErrorEvent type can be used to filter events. The `Err` method
 // retuns the underlying error.
 type ErrorEvent interface {
 	Event
@@ -251,8 +286,8 @@ func (e *eventUnsupportedTracer) Err() error {
 	OnEvent Handlers
 */
 
-// NewLogOnEvent logs events using the standard go logger
-func NewOnEventLogger() func(Event) {
+// NewOnEventLogger logs events using the standard go logger.
+func NewOnEventLogger() OnEventHandler {
 	return logOnEvent
 }
 
@@ -265,8 +300,8 @@ func logOnEvent(event Event) {
 	}
 }
 
-// NewLogOnceOnError only logs the first error
-func NewOnEventLogOneError() func(Event) {
+// NewOnEventLogOneError logs the first error event that occurs.
+func NewOnEventLogOneError() OnEventHandler {
 	logger := logOneError{}
 	return logger.OnEvent
 }
@@ -288,7 +323,7 @@ func (l *logOneError) OnEvent(event Event) {
 // produces the errors. When the channel buffer is full, subsequent errors will
 // be dropped. A buffer size of less than one is incorrect, and will be adjusted
 // to a buffer size of one.
-func NewOnEventChannel(buffer int) (func(Event), <-chan Event) {
+func NewOnEventChannel(buffer int) (OnEventHandler, <-chan Event) {
 	if buffer < 1 {
 		buffer = 1
 	}

@@ -46,10 +46,10 @@ var _ = Describe("Tracer", func() {
 
 	Describe("Flush", func() {
 		BeforeEach(func() {
+			OnEvent(eventHandler)
 			opts = Options{
 				AccessToken: fakeAccessToken,
 				ConnFactory: fakeConn,
-				OnEvent:     eventHandler,
 			}
 		})
 

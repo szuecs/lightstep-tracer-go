@@ -6,13 +6,11 @@ import (
 	opentracing "github.com/opentracing/opentracing-go"
 )
 
-var logError = NewOnEventLogger()
-
 // Flush forces a synchronous Flush.
 func Flush(ctx context.Context, tracer opentracing.Tracer) {
 	lsTracer, ok := tracer.(Tracer)
 	if !ok {
-		logError(newEventUnsupportedTracer(tracer))
+		onEvent(newEventUnsupportedTracer(tracer))
 		return
 	}
 	lsTracer.Flush(ctx)
@@ -22,7 +20,7 @@ func Flush(ctx context.Context, tracer opentracing.Tracer) {
 func Close(ctx context.Context, tracer opentracing.Tracer) {
 	lsTracer, ok := tracer.(Tracer)
 	if !ok {
-		logError(newEventUnsupportedTracer(tracer))
+		onEvent(newEventUnsupportedTracer(tracer))
 		return
 	}
 	lsTracer.Close(ctx)
