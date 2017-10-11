@@ -1,6 +1,7 @@
 package lightstep_test
 
 import (
+	"fmt"
 	"sync"
 	"time"
 
@@ -23,8 +24,8 @@ var _ = Describe("Tracer", func() {
 	var fakeConn ConnectorFactory
 	var fakeRecorder *lightstepfakes.FakeSpanRecorder
 	const fakeAccessToken = "YOU SHALL NOT PASS"
-	var errorHandler func(error)
-	var errChan <-chan error
+	var eventHandler func(Event)
+	var eventChan <-chan Event
 
 	BeforeEach(func() {
 		opts = Options{}
@@ -32,7 +33,7 @@ var _ = Describe("Tracer", func() {
 		fakeClient.ReportReturns(&cpb.ReportResponse{}, nil)
 		fakeConn = fakeGrpcConnection(fakeClient)
 		fakeRecorder = new(lightstepfakes.FakeSpanRecorder)
-		errorHandler, errChan = NewChannelOnError(10)
+		eventHandler, eventChan = NewOnEventChannel(10)
 	})
 
 	JustBeforeEach(func() {
@@ -48,8 +49,37 @@ var _ = Describe("Tracer", func() {
 			opts = Options{
 				AccessToken: fakeAccessToken,
 				ConnFactory: fakeConn,
-				OnError:     errorHandler,
+				OnEvent:     eventHandler,
 			}
+		})
+
+		Context("when the tracer is dropping spans", func() {
+			const ExpectedDroppedSpans = 2
+
+			JustBeforeEach(func() {
+				// overflow the span buffer so the tracer starts to drop spans
+				for i := 0; i < DefaultMaxSpans+ExpectedDroppedSpans; i++ {
+					tracer.StartSpan(fmt.Sprint("span ", i)).Finish()
+				}
+			})
+
+			It("OnEvent emits EventStatusReport", func(done Done) {
+				tracer.Flush(context.Background())
+
+				err := <-eventChan
+				dropSpanErr, ok := err.(EventStatusReport)
+				Expect(ok).To(BeTrue())
+
+				Expect(dropSpanErr.DroppedSpans()).To(Equal(ExpectedDroppedSpans))
+				close(done)
+			})
+
+			It("OnEvent emits exactly one event", func() {
+				tracer.Flush(context.Background())
+
+				Eventually(eventChan).Should(Receive())
+				Consistently(eventChan).ShouldNot(Receive())
+			})
 		})
 
 		Context("when the tracer is disabled", func() {
@@ -57,26 +87,31 @@ var _ = Describe("Tracer", func() {
 				tracer.Disable()
 			})
 
-			It("should not record or flush spans", func() {
+			It("should not flush spans", func() {
 				reportCallCount := fakeClient.ReportCallCount()
 				tracer.StartSpan("these spans should not be recorded").Finish()
 				tracer.StartSpan("or flushed").Finish()
+
 				tracer.Flush(context.Background())
+
 				Consistently(fakeClient.ReportCallCount).Should(Equal(reportCallCount))
 			}, 5)
 
-			It("OnError emits ErrDisabled", func(done Done) {
+			It("OnEvent emits EventFlushError", func(done Done) {
 				tracer.Flush(context.Background())
-				err := <-errChan
-				_, ok := err.(ErrDisabled)
+
+				event := <-eventChan
+				flushErrorEvent, ok := event.(EventFlushError)
 				Expect(ok).To(BeTrue())
+				Expect(flushErrorEvent.State()).To(Equal(FlushErrorTracerDisabled))
 				close(done)
 			})
 
-			It("OnError emits exactly one error", func() {
+			It("OnEvent emits exactly one event", func() {
 				tracer.Flush(context.Background())
-				Eventually(errChan).Should(Receive())
-				Consistently(errChan).ShouldNot(Receive())
+
+				Eventually(eventChan).Should(Receive())
+				Consistently(eventChan).ShouldNot(Receive())
 			})
 		})
 
@@ -91,8 +126,30 @@ var _ = Describe("Tracer", func() {
 			It("should not flush spans", func() {
 				tracer.StartSpan("can't flush this").Finish()
 				tracer.StartSpan("hammer time").Finish()
+
 				tracer.Flush(context.Background())
+
 				Consistently(fakeClient.ReportCallCount).Should(Equal(reportCallCount))
+			})
+
+			It("OnEvent emits EventFlushError", func(done Done) {
+				tracer.Flush(context.Background())
+
+				Eventually(eventChan).Should(Receive())
+
+				event := <-eventChan
+				flushErrorEvent, ok := event.(EventFlushError)
+				Expect(ok).To(BeTrue())
+				Expect(flushErrorEvent.State()).To(Equal(FlushErrorTracerClosed))
+				close(done)
+			})
+
+			It("OnEvent emits exactly two events", func() {
+				tracer.Flush(context.Background())
+
+				Eventually(eventChan).Should(Receive())
+				Eventually(eventChan).Should(Receive())
+				Consistently(eventChan).ShouldNot(Receive())
 			})
 		})
 

@@ -6,13 +6,13 @@ import (
 	opentracing "github.com/opentracing/opentracing-go"
 )
 
-var logError = NewLogOnError()
+var logError = NewOnEventLogger()
 
 // Flush forces a synchronous Flush.
 func Flush(ctx context.Context, tracer opentracing.Tracer) {
 	lsTracer, ok := tracer.(Tracer)
 	if !ok {
-		logError(newErrNotLisghtepTracer(tracer))
+		logError(newEventUnsupportedTracer(tracer))
 		return
 	}
 	lsTracer.Flush(ctx)
@@ -22,7 +22,7 @@ func Flush(ctx context.Context, tracer opentracing.Tracer) {
 func Close(ctx context.Context, tracer opentracing.Tracer) {
 	lsTracer, ok := tracer.(Tracer)
 	if !ok {
-		logError(newErrNotLisghtepTracer(tracer))
+		logError(newEventUnsupportedTracer(tracer))
 		return
 	}
 	lsTracer.Close(ctx)
@@ -32,7 +32,7 @@ func Close(ctx context.Context, tracer opentracing.Tracer) {
 func GetLightStepAccessToken(tracer opentracing.Tracer) (string, error) {
 	lsTracer, ok := tracer.(Tracer)
 	if !ok {
-		return "", newErrNotLisghtepTracer(tracer)
+		return "", newEventUnsupportedTracer(tracer)
 	}
 
 	return lsTracer.Options().AccessToken, nil
@@ -42,7 +42,7 @@ func GetLightStepAccessToken(tracer opentracing.Tracer) (string, error) {
 func FlushLightStepTracer(lsTracer opentracing.Tracer) error {
 	tracer, ok := lsTracer.(Tracer)
 	if !ok {
-		return newErrNotLisghtepTracer(lsTracer)
+		return newEventUnsupportedTracer(lsTracer)
 	}
 
 	tracer.Flush(context.Background())
@@ -53,7 +53,7 @@ func FlushLightStepTracer(lsTracer opentracing.Tracer) error {
 func CloseTracer(tracer opentracing.Tracer) error {
 	lsTracer, ok := tracer.(Tracer)
 	if !ok {
-		return newErrNotLisghtepTracer(tracer)
+		return newEventUnsupportedTracer(tracer)
 	}
 
 	lsTracer.Close(context.Background())

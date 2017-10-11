@@ -130,13 +130,11 @@ type Options struct {
 
 	ReconnectPeriod time.Duration `yaml:"reconnect_period"`
 
-	/*
-		OnError handler receives errors as they occur. OnError is called synchronously
-		do not block in your handler as it will interfere with the tracer. If no
-		OnError is provided, LogOnceOnError (or LogOnError if Verbose is set) is
-		used by default.
-	*/
-	OnError func(error)
+	//	OnEvent handler receives events as they occur. OnEvent is called synchronously
+	//	do not block in your handler as it will interfere with the tracer. If no
+	//	OnEvent is provided, LogOnceOnError (or LogOnError if Verbose is set) is
+	//	used by default.
+	OnEvent func(Event)
 
 	// a hook for recieving finished span events
 	Recorder SpanRecorder `yaml:"-" json:"-"`
@@ -181,11 +179,11 @@ func (opts *Options) Initialize() error {
 	if opts.Tags == nil {
 		opts.Tags = map[string]interface{}{}
 	}
-	if opts.OnError == nil {
+	if opts.OnEvent == nil {
 		if opts.Verbose {
-			opts.OnError = NewLogOnError()
+			opts.OnEvent = NewOnEventLogger()
 		} else {
-			opts.OnError = NewLogOnceOnError()
+			opts.OnEvent = NewOnEventLogOneError()
 		}
 	}
 
@@ -222,13 +220,15 @@ func (opts *Options) Initialize() error {
 	return nil
 }
 
+// Validate checks that all required fields are set, and no options are incorrectly
+// configured.
 func (opts *Options) Validate() error {
 	if len(opts.AccessToken) == 0 {
-		return fmt.Errorf("LightStep Recorder options.AccessToken must not be empty")
+		return validationErrorNoAccessToken
 	}
 
 	if _, found := opts.Tags[GUIDKey]; found {
-		return fmt.Errorf("Passing in your own %v is no longer supported\n", GUIDKey)
+		return validationErrorGUIDKey
 	}
 
 	return nil

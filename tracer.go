@@ -2,7 +2,6 @@ package lightstep
 
 import (
 	"fmt"
-	"log"
 	"time"
 
 	"golang.org/x/net/context"
@@ -63,7 +62,11 @@ type tracerImpl struct {
 func NewTracer(opts Options) Tracer {
 	err := opts.Initialize()
 	if err != nil {
-		log.Println(err.Error())
+		if opts.OnEvent != nil {
+			opts.OnEvent(newEventStartError(err))
+		} else {
+			logOnEvent(newEventStartError(err))
+		}
 		return nil
 	}
 
@@ -94,7 +97,7 @@ func NewTracer(opts Options) Tracer {
 
 	conn, err := impl.client.ConnectClient()
 	if err != nil {
-		impl.onError(err)
+		impl.onEvent(newEventStartError(err))
 		return nil
 	}
 
@@ -146,7 +149,7 @@ func (t *tracerImpl) Extract(format interface{}, carrier interface{}) (ot.SpanCo
 func (t *tracerImpl) reconnectClient(now time.Time) {
 	conn, err := t.client.ConnectClient()
 	if err != nil {
-		t.onError(err)
+		t.onEvent(newEventConnectionError(err))
 	} else {
 		t.lock.Lock()
 		oldConn := t.conn
@@ -190,7 +193,7 @@ func (t *tracerImpl) Close(ctx context.Context) {
 	if conn != nil {
 		err := conn.Close()
 		if err != nil {
-			t.onError(err)
+			t.onEvent(newEventConnectionError(err))
 		}
 	}
 }
@@ -217,43 +220,49 @@ func (t *tracerImpl) RecordSpan(raw RawSpan) {
 func (t *tracerImpl) Flush(ctx context.Context) {
 	t.flushingLock.Lock()
 	defer t.flushingLock.Unlock()
+	var flushErrorEvent *eventFlushError
 
-	err := t.preFlush()
-	if err != nil {
-		t.onError(err)
+	flushErrorEvent = t.preFlush()
+	if flushErrorEvent != nil {
+		t.onEvent(flushErrorEvent)
 		return
 	}
 
 	ctx, cancel := context.WithTimeout(ctx, t.opts.ReportTimeout)
 	defer cancel()
-	resp, err := t.client.Report(ctx, &t.flushing)
 
-	respErrs := resp.GetErrors()
-	if err == nil && len(respErrs) > 0 {
-		err = fmt.Errorf(respErrs[0])
+	resp, flushErr := t.client.Report(ctx, &t.flushing)
+
+	if flushErr != nil {
+		flushErrorEvent = newEventFlushError(flushErr, FlushErrorTransport)
+	} else if len(resp.GetErrors()) > 0 {
+		flushErrorEvent = newEventFlushError(fmt.Errorf(resp.GetErrors()[0]), FlushErrorReport)
 	}
 
-	t.postFlush(err)
+	statusReportEvent := t.postFlush(flushErrorEvent)
 
-	if resp.Disable() {
+	if flushErrorEvent != nil {
+		t.onEvent(flushErrorEvent)
+	}
+
+	t.onEvent(statusReportEvent)
+
+	if flushErr == nil && resp.Disable() {
 		t.Disable()
-	}
-
-	if err != nil {
-		t.onError(err)
 	}
 }
 
-func (t *tracerImpl) preFlush() error {
+// preFlush handles lock-protected data manipulation before flushing
+func (t *tracerImpl) preFlush() *eventFlushError {
 	t.lock.Lock()
 	defer t.lock.Unlock()
 
 	if t.disabled {
-		return newErrDisabled(ErrFlushingWhenDisabled)
+		return newEventFlushError(flushErrorTracerClosed, FlushErrorTracerDisabled)
 	}
 
 	if t.conn == nil {
-		return newErrClosed(ErrFlushingWhenClosed)
+		return newEventFlushError(flushErrorTracerClosed, FlushErrorTracerClosed)
 	}
 
 	now := time.Now()
@@ -265,23 +274,30 @@ func (t *tracerImpl) preFlush() error {
 	return nil
 }
 
-func (t *tracerImpl) postFlush(err error) {
+// postFlush handles lock-protected data manipulation after flushing
+func (t *tracerImpl) postFlush(flushEventError *eventFlushError) *eventStatusReport {
 	t.lock.Lock()
 	defer t.lock.Unlock()
 
 	t.reportInFlight = false
-	if err != nil {
+
+	statusReportEvent := newEventStatusReport(
+		t.flushing.reportStart,
+		t.flushing.reportEnd,
+		len(t.flushing.rawSpans),
+		int(t.flushing.droppedSpanCount+t.buffer.droppedSpanCount),
+		int(t.flushing.logEncoderErrorCount+t.buffer.logEncoderErrorCount),
+	)
+
+	if flushEventError != nil {
 		// Restore the records that did not get sent correctly
 		t.buffer.mergeFrom(&t.flushing)
-		return
+		statusReportEvent.SetSentSpans(0)
+	} else {
+		t.flushing.clear()
 	}
 
-	//
-	droppedSent := t.flushing.droppedSpanCount
-	if droppedSent != 0 {
-		maybeLogInfof("client reported %d dropped spans", t.opts.Verbose, droppedSent)
-	}
-	t.flushing.clear()
+	return statusReportEvent
 }
 
 func (t *tracerImpl) Disable() {
@@ -298,9 +314,9 @@ func (t *tracerImpl) Disable() {
 	t.disabled = true
 }
 
-func (t *tracerImpl) onError(err error) {
-	if t.opts.OnError != nil {
-		t.opts.OnError(err)
+func (t *tracerImpl) onEvent(event Event) {
+	if t.opts.OnEvent != nil {
+		t.opts.OnEvent(event)
 	}
 }
 
