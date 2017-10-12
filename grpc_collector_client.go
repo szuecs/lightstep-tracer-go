@@ -235,10 +235,17 @@ func convertToInternalMetrics(b *reportBuffer) *cpb.InternalMetrics {
 }
 
 func translateSpanContext(sc SpanContext) *cpb.SpanContext {
+	baggage := make([]*cpb.SpanContextEntry, 0, len(sc.Baggage))
+	for k, v := range sc.Baggage {
+		baggage = append(baggage, &cpb.SpanContextEntry{
+			Key:   k,
+			Value: v,
+		})
+	}
 	return &cpb.SpanContext{
 		TraceId: sc.TraceID,
 		SpanId:  sc.SpanID,
-		Baggage: sc.Baggage,
+		Baggage: baggage,
 	}
 }
 

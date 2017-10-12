@@ -80,7 +80,7 @@ var _ = Describe("Tracer", func() {
 
 				Eventually(latestSpans).Should(HaveLen(1))
 				spans := latestSpans()
-				Expect(spans[0].GetSpanContext().GetBaggage()).To(BeEquivalentTo(map[string]string{"x": "y"}))
+				Expect(spans[0].GetSpanContext().GetBaggage()).To(BeEquivalentTo([]*cpb.SpanContextEntry{&cpb.SpanContextEntry{Key: "x", Value: "y"}}))
 			})
 
 			It("ForeachBaggageItem", func() {
