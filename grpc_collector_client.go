@@ -194,13 +194,23 @@ func (client *grpcCollectorClient) makeReportRequest(buffer *reportBuffer) *cpb.
 
 }
 
-func (client *grpcCollectorClient) Report(ctx context.Context, buffer *reportBuffer) (collectorResponse, error) {
-	resp, err := client.grpcClient.Report(ctx, client.makeReportRequest(buffer))
+func (client *grpcCollectorClient) Report(ctx context.Context, req *reportRequest) (collectorResponse, error) {
+	if req.grpcRequest == nil {
+		return nil, errors.InvalidArgument("grpcRequest cannot be null")
+	}
+	resp, err := client.grpcClient.Report(ctx, req.grpcRequest)
 	if err != nil {
 		return nil, err
 	}
 
 	return resp, nil
+}
+
+func (client *grpcCollectorClient) Translate(ctx context.Context, buffer *reportBuffer) reportRequest {
+	req := client.makeReportRequest(buffer)
+	return reportRequest{
+		grpcRequest: req,
+	}
 }
 
 func translateAttributes(atts map[string]string) []*cpb.KeyValue {

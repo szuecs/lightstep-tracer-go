@@ -21,9 +21,15 @@ type collectorResponse interface {
 	Disable() bool
 }
 
+type reportRequest struct {
+	thriftRequest *lightstep_thrift.ReportRequest
+	grpcRequest   *cpb.ReportRequest
+}
+
 // collectorClient encapsulates internal thrift/grpc transports.
 type collectorClient interface {
-	Report(context.Context, *reportBuffer) (collectorResponse, error)
+	Translate(context.Context, *reportBuffer) (reportRequest, error)
+	Report(context.Context, reportRequest) (collectorResponse, error)
 	ConnectClient() (Connection, error)
 	ShouldReconnect() bool
 }
