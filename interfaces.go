@@ -24,6 +24,8 @@ type collectorResponse interface {
 // reportRequest encapsulates internal thrift/grpc requests.
 type reportRequest interface {
 	//TBD
+	// *ThriftType
+	// *GRPCType
 }
 
 // collectorClient encapsulates internal thrift/grpc transports.
