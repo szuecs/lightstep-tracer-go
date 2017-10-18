@@ -8,6 +8,7 @@ import (
 
 	"golang.org/x/net/context"
 
+	"github.com/lightstep/common-go/errors"
 	"github.com/lightstep/lightstep-tracer-go/lightstep_thrift"
 	"github.com/lightstep/lightstep-tracer-go/thrift_0_9_2/lib/go/thrift"
 )
@@ -118,7 +119,7 @@ func (client *thriftCollectorClient) Report(_ context.Context, req reportRequest
 	return resp, err
 }
 
-func (r *thriftCollectorClient) Translate(_ context.Context, buffer *reportBuffer) (reportRequest, error) {
+func (client *thriftCollectorClient) Translate(_ context.Context, buffer *reportBuffer) (reportRequest, error) {
 	rawSpans := buffer.rawSpans
 	// Convert them to thrift.
 	recs := make([]*lightstep_thrift.SpanRecord, len(rawSpans))
@@ -186,7 +187,7 @@ func (r *thriftCollectorClient) Translate(_ context.Context, buffer *reportBuffe
 
 	return reportRequest{
 		thriftRequest: req,
-	}
+	}, nil
 
 }
 

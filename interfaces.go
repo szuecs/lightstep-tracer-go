@@ -3,6 +3,8 @@ package lightstep
 import (
 	"io"
 
+	cpb "github.com/lightstep/lightstep-tracer-go/collectorpb"
+	"github.com/lightstep/lightstep-tracer-go/lightstep_thrift"
 	ot "github.com/opentracing/opentracing-go"
 	"golang.org/x/net/context"
 )

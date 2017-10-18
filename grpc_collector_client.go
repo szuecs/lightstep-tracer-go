@@ -14,6 +14,7 @@ import (
 	// N.B.(jmacd): Do not use google.golang.org/glog in this package.
 
 	google_protobuf "github.com/golang/protobuf/ptypes/timestamp"
+	"github.com/lightstep/common-go/errors"
 	cpb "github.com/lightstep/lightstep-tracer-go/collectorpb"
 	ot "github.com/opentracing/opentracing-go"
 )
@@ -91,7 +92,7 @@ func (client *grpcCollectorClient) ConnectClient() (Connection, error) {
 
 		grpcClient, ok := uncheckedClient.(cpb.CollectorServiceClient)
 		if !ok {
-			return nil, fmt.Errorf("Grpc connector factory did not provide valid client!")
+			return nil, fmt.Errorf("grpc connector factory did not provide valid client")
 		}
 
 		conn = transport
@@ -194,7 +195,7 @@ func (client *grpcCollectorClient) makeReportRequest(buffer *reportBuffer) *cpb.
 
 }
 
-func (client *grpcCollectorClient) Report(ctx context.Context, req *reportRequest) (collectorResponse, error) {
+func (client *grpcCollectorClient) Report(ctx context.Context, req reportRequest) (collectorResponse, error) {
 	if req.grpcRequest == nil {
 		return nil, errors.InvalidArgument("grpcRequest cannot be null")
 	}
@@ -206,11 +207,11 @@ func (client *grpcCollectorClient) Report(ctx context.Context, req *reportReques
 	return resp, nil
 }
 
-func (client *grpcCollectorClient) Translate(ctx context.Context, buffer *reportBuffer) reportRequest {
+func (client *grpcCollectorClient) Translate(ctx context.Context, buffer *reportBuffer) (reportRequest, error) {
 	req := client.makeReportRequest(buffer)
 	return reportRequest{
 		grpcRequest: req,
-	}
+	}, nil
 }
 
 func translateAttributes(atts map[string]string) []*cpb.KeyValue {
