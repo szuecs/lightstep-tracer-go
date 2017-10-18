@@ -14,7 +14,6 @@ import (
 	// N.B.(jmacd): Do not use google.golang.org/glog in this package.
 
 	google_protobuf "github.com/golang/protobuf/ptypes/timestamp"
-	"github.com/lightstep/common-go/errors"
 	cpb "github.com/lightstep/lightstep-tracer-go/collectorpb"
 	ot "github.com/opentracing/opentracing-go"
 )
@@ -197,7 +196,7 @@ func (client *grpcCollectorClient) makeReportRequest(buffer *reportBuffer) *cpb.
 
 func (client *grpcCollectorClient) Report(ctx context.Context, req reportRequest) (collectorResponse, error) {
 	if req.grpcRequest == nil {
-		return nil, errors.InvalidArgument("grpcRequest cannot be null")
+		return nil, fmt.Errorf("grpcRequest cannot be null")
 	}
 	resp, err := client.grpcClient.Report(ctx, req.grpcRequest)
 	if err != nil {

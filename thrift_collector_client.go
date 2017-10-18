@@ -8,7 +8,6 @@ import (
 
 	"golang.org/x/net/context"
 
-	"github.com/lightstep/common-go/errors"
 	"github.com/lightstep/lightstep-tracer-go/lightstep_thrift"
 	"github.com/lightstep/lightstep-tracer-go/thrift_0_9_2/lib/go/thrift"
 )
@@ -109,7 +108,7 @@ func (*thriftCollectorClient) ShouldReconnect() bool {
 
 func (client *thriftCollectorClient) Report(_ context.Context, req reportRequest) (collectorResponse, error) {
 	if req.thriftRequest == nil {
-		return nil, errors.InvalidArgument("thriftRequest cannot be null")
+		return nil, fmt.Errorf("thriftRequest cannot be null")
 	}
 	resp, err := client.thriftClient.Report(client.auth, req.thriftRequest)
 	if err != nil {
