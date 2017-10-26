@@ -2,11 +2,12 @@ package lightstep
 
 import (
 	"fmt"
+	"reflect"
+	"time"
+
 	google_protobuf "github.com/golang/protobuf/ptypes/timestamp"
 	cpb "github.com/lightstep/lightstep-tracer-go/collectorpb"
 	ot "github.com/opentracing/opentracing-go"
-	"reflect"
-	"time"
 )
 
 type protoConverter struct {
@@ -118,6 +119,7 @@ func (converter *protoConverter) toField(key string, value interface{}) *cpb.Key
 			s = stringer.String()
 		} else {
 			s = fmt.Sprintf("%#v", value)
+			emitEvent(newEventUnsupportedValue(key, value, nil))
 		}
 		field.Value = &cpb.KeyValue_StringValue{StringValue: s}
 	}
