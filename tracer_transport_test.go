@@ -1,9 +1,12 @@
 package lightstep_test
 
 import (
+	"context"
 	"encoding/json"
 	"strings"
 	"time"
+
+	"strconv"
 
 	. "github.com/lightstep/lightstep-tracer-go"
 	"github.com/lightstep/lightstep-tracer-go/collectorpb"
@@ -11,7 +14,6 @@ import (
 	. "github.com/onsi/gomega"
 	ot "github.com/opentracing/opentracing-go"
 	"github.com/opentracing/opentracing-go/log"
-	"strconv"
 )
 
 // Interfaces
@@ -59,8 +61,6 @@ var _ = Describe("Tracer Transports", func() {
 	JustBeforeEach(func() {
 		options.ConnFactory = fakeClient.ConnectorFactory()
 		tracer = NewTracer(*options)
-		// make sure the fake client is working
-		Eventually(fakeClient.ReportCallCount).ShouldNot(BeZero())
 	})
 
 	AfterEach(func() {
@@ -69,15 +69,7 @@ var _ = Describe("Tracer Transports", func() {
 
 	ItShouldBehaveLikeATracer := func(tracerTestOptions ...testOption) {
 		testOptions := toTestOptions(tracerTestOptions)
-		Context("with default options", func() {
-			BeforeEach(func() {
-				options.AccessToken = "0987654321"
-				options.Collector = Endpoint{"localhost", port, true}
-				options.ReportingPeriod = 1 * time.Millisecond
-				options.MinReportingPeriod = 1 * time.Millisecond
-				options.ReportTimeout = 10 * time.Millisecond
-			})
-
+		Describe("Span Attributes", func() {
 			It("Should record baggage info internally", func() {
 				span := tracer.StartSpan("x")
 				span.SetBaggageItem("x", "y")
@@ -87,7 +79,9 @@ var _ = Describe("Tracer Transports", func() {
 			It("Should send span operation names to the collector", func() {
 				tracer.StartSpan("smooth").Finish()
 
-				Eventually(fakeClient.GetSpansLen).Should(Equal(1))
+				Flush(context.Background(), tracer)
+
+				Expect(fakeClient.GetSpansLen()).To(Equal(1))
 				Expect(fakeClient.GetSpan(0).GetOperationName()).To(Equal("smooth"))
 			})
 
@@ -96,7 +90,9 @@ var _ = Describe("Tracer Transports", func() {
 				span.SetTag("tag", "you're it!")
 				span.Finish()
 
-				Eventually(fakeClient.GetSpansLen).Should(Equal(1))
+				Flush(context.Background(), tracer)
+
+				Expect(fakeClient.GetSpansLen()).To(Equal(1))
 				Expect(fakeClient.GetSpan(0).GetTags()).To(HaveKeyValues(KeyValue("tag", "you're it!")))
 			})
 
@@ -106,7 +102,9 @@ var _ = Describe("Tracer Transports", func() {
 					span.SetBaggageItem("x", "y")
 					span.Finish()
 
-					Eventually(fakeClient.GetSpansLen).Should(Equal(1))
+					Flush(context.Background(), tracer)
+
+					Expect(fakeClient.GetSpansLen()).To(Equal(1))
 					Expect(fakeClient.GetSpan(0).GetSpanContext().Baggage).To(BeEquivalentTo(map[string]string{"x": "y"}))
 				})
 
@@ -129,188 +127,193 @@ var _ = Describe("Tracer Transports", func() {
 					Expect(baggage).To(HaveLen(1))
 					span.Finish()
 
-					Eventually(fakeClient.GetSpansLen).Should(Equal(1))
+					Flush(context.Background(), tracer)
+
+					Expect(fakeClient.GetSpansLen()).To(Equal(1))
 					Expect(fakeClient.GetSpan(0).GetSpanContext().Baggage).To(HaveLen(2))
 				})
 			}
+		})
 
-			Describe("CloseTracer", func() {
-				It("Should not explode when called twice", func() {
-					closeTestTracer(tracer)
-					closeTestTracer(tracer)
+		Describe("CloseTracer", func() {
+			BeforeEach(func() {
+				options.ReportingPeriod = 1 * time.Millisecond
+				options.MinReportingPeriod = 1 * time.Millisecond
+			})
+
+			It("Should not explode when called twice", func() {
+				closeTestTracer(tracer)
+				closeTestTracer(tracer)
+			})
+
+			It("Should behave nicely", func() {
+				By("Not hanging")
+				closeTestTracer(tracer)
+
+				By("Stop communication with server")
+				lastCallCount := fakeClient.ReportCallCount()
+				Consistently(fakeClient.ReportCallCount, 0.5, 0.05).Should(Equal(lastCallCount))
+
+				By("Allowing other tracers to reconnect to the server")
+				tracer = NewTracer(*options)
+				Eventually(fakeClient.ReportCallCount).ShouldNot(Equal(lastCallCount))
+			})
+		})
+
+		Describe("Options", func() {
+			const expectedTraceID uint64 = 1
+			const expectedSpanID uint64 = 2
+			const expectedParentSpanID uint64 = 3
+
+			Context("when the TraceID is set", func() {
+				JustBeforeEach(func() {
+					tracer.StartSpan("x", SetTraceID(expectedTraceID)).Finish()
+					Flush(context.Background(), tracer)
 				})
 
-				It("Should behave nicely", func() {
-					By("Not hanging")
-					closeTestTracer(tracer)
-
-					By("Stop communication with server")
-					lastCallCount := fakeClient.ReportCallCount()
-					Consistently(fakeClient.ReportCallCount, 0.5, 0.05).Should(Equal(lastCallCount))
-
-					By("Allowing other tracers to reconnect to the server")
-					tracer = NewTracer(*options)
-					Eventually(fakeClient.ReportCallCount).ShouldNot(Equal(lastCallCount))
+				It("should set the specified options", func() {
+					Expect(fakeClient.GetSpansLen()).To(Equal(1))
+					Expect(fakeClient.GetSpan(0).GetSpanContext().TraceID).To(Equal(expectedTraceID))
+					Expect(fakeClient.GetSpan(0).GetSpanContext().SpanID).ToNot(Equal(uint64(0)))
+					if testOptions.supportsReference {
+						Expect(fakeClient.GetSpan(0).GetReferences()).To(BeEmpty())
+					}
 				})
 			})
 
-			Describe("Options", func() {
-				const expectedTraceID uint64 = 1
-				const expectedSpanID uint64 = 2
-				const expectedParentSpanID uint64 = 3
-
-				Context("when the TraceID is set", func() {
-					JustBeforeEach(func() {
-						tracer.StartSpan("x", SetTraceID(expectedTraceID)).Finish()
-					})
-
-					It("should set the specified options", func() {
-						Eventually(fakeClient.GetSpansLen).Should(Equal(1))
-						Expect(fakeClient.GetSpan(0).GetSpanContext().TraceID).To(Equal(expectedTraceID))
-						Expect(fakeClient.GetSpan(0).GetSpanContext().SpanID).ToNot(Equal(uint64(0)))
-						if testOptions.supportsReference {
-							Expect(fakeClient.GetSpan(0).GetReferences()).To(BeEmpty())
-						}
-					})
+			Context("when both the TraceID and SpanID are set", func() {
+				JustBeforeEach(func() {
+					tracer.StartSpan("x", SetTraceID(expectedTraceID), SetSpanID(expectedSpanID)).Finish()
+					Flush(context.Background(), tracer)
 				})
 
-				Context("when both the TraceID and SpanID are set", func() {
-					JustBeforeEach(func() {
-						tracer.StartSpan("x", SetTraceID(expectedTraceID), SetSpanID(expectedSpanID)).Finish()
-					})
-
-					It("Should set the specified options", func() {
-						Eventually(fakeClient.GetSpansLen).Should(Equal(1))
-						Expect(fakeClient.GetSpan(0).GetSpanContext().TraceID).To(Equal(expectedTraceID))
-						Expect(fakeClient.GetSpan(0).GetSpanContext().SpanID).To(Equal(expectedSpanID))
-						if testOptions.supportsReference {
-							Expect(fakeClient.GetSpan(0).GetReferences()).To(BeEmpty())
-						}
-					})
-				})
-
-				Context("when TraceID, SpanID, and ParentSpanID are set", func() {
-					JustBeforeEach(func() {
-						tracer.StartSpan("x", SetTraceID(expectedTraceID), SetSpanID(expectedSpanID), SetParentSpanID(expectedParentSpanID)).Finish()
-					})
-
-					It("Should set the specified options", func() {
-						Eventually(fakeClient.GetSpansLen).Should(Equal(1))
-						Expect(fakeClient.GetSpan(0).GetSpanContext().TraceID).To(Equal(expectedTraceID))
-						Expect(fakeClient.GetSpan(0).GetSpanContext().SpanID).To(Equal(expectedSpanID))
-						if testOptions.supportsReference {
-							Expect(fakeClient.GetSpan(0).GetReferences()).ToNot(BeEmpty())
-							Expect(fakeClient.GetSpan(0).GetReference(0).GetSpanContext().SpanID).To(Equal(expectedParentSpanID))
-						}
-					})
+				It("Should set the specified options", func() {
+					Expect(fakeClient.GetSpansLen()).To(Equal(1))
+					Expect(fakeClient.GetSpan(0).GetSpanContext().TraceID).To(Equal(expectedTraceID))
+					Expect(fakeClient.GetSpan(0).GetSpanContext().SpanID).To(Equal(expectedSpanID))
+					if testOptions.supportsReference {
+						Expect(fakeClient.GetSpan(0).GetReferences()).To(BeEmpty())
+					}
 				})
 			})
 
-			Describe("Binary Carriers", func() {
-				const knownCarrier1 = "EigJOjioEaYHBgcRNmifUO7/xlgYASISCgdjaGVja2VkEgdiYWdnYWdl"
-				const knownCarrier2 = "EigJEX+FpwZ/EmYR2gfYQbxCMskYASISCgdjaGVja2VkEgdiYWdnYWdl"
-				const badCarrier1 = "Y3QbxCMskYASISCgdjaGVja2VkEgd"
-
-				var knownContext1 = SpanContext{
-					SpanID:  6397081719746291766,
-					TraceID: 506100417967962170,
-					Baggage: map[string]string{"checked": "baggage"},
-				}
-				var knownContext2 = SpanContext{
-					SpanID:  14497723526785009626,
-					TraceID: 7355080808006516497,
-					Baggage: map[string]string{"checked": "baggage"},
-				}
-				var testContext1 = SpanContext{
-					SpanID:  123,
-					TraceID: 456,
-					Baggage: nil,
-				}
-				var testContext2 = SpanContext{
-					SpanID:  123000000000,
-					TraceID: 456000000000,
-					Baggage: map[string]string{"a": "1", "b": "2", "c": "3"},
-				}
-
-				Context("tracer inject", func() {
-					var carrierString string
-					var carrierBytes []byte
-
-					BeforeEach(func() {
-						carrierString = ""
-						carrierBytes = []byte{}
-					})
-
-					It("Should support injecting into strings ", func() {
-						for _, origContext := range []SpanContext{knownContext1, knownContext2, testContext1, testContext2} {
-							err := tracer.Inject(origContext, BinaryCarrier, &carrierString)
-							Expect(err).ToNot(HaveOccurred())
-
-							context, err := tracer.Extract(BinaryCarrier, carrierString)
-							Expect(err).ToNot(HaveOccurred())
-							Expect(context).To(BeEquivalentTo(origContext))
-						}
-					})
-
-					It("Should support injecting into byte arrays", func() {
-						for _, origContext := range []SpanContext{knownContext1, knownContext2, testContext1, testContext2} {
-							err := tracer.Inject(origContext, BinaryCarrier, &carrierBytes)
-							Expect(err).ToNot(HaveOccurred())
-
-							context, err := tracer.Extract(BinaryCarrier, carrierBytes)
-							Expect(err).ToNot(HaveOccurred())
-							Expect(context).To(BeEquivalentTo(origContext))
-						}
-					})
-
-					It("Should return nil for nil contexts", func() {
-						err := tracer.Inject(nil, BinaryCarrier, carrierString)
-						Expect(err).To(HaveOccurred())
-
-						err = tracer.Inject(nil, BinaryCarrier, carrierBytes)
-						Expect(err).To(HaveOccurred())
-					})
+			Context("when TraceID, SpanID, and ParentSpanID are set", func() {
+				JustBeforeEach(func() {
+					tracer.StartSpan("x", SetTraceID(expectedTraceID), SetSpanID(expectedSpanID), SetParentSpanID(expectedParentSpanID)).Finish()
+					Flush(context.Background(), tracer)
 				})
 
-				Context("tracer extract", func() {
-					It("Should extract SpanContext from carrier as string", func() {
-						context, err := tracer.Extract(BinaryCarrier, knownCarrier1)
-						Expect(context).To(BeEquivalentTo(knownContext1))
-						Expect(err).To(BeNil())
+				It("Should set the specified options", func() {
+					Expect(fakeClient.GetSpansLen()).To(Equal(1))
+					Expect(fakeClient.GetSpan(0).GetSpanContext().TraceID).To(Equal(expectedTraceID))
+					Expect(fakeClient.GetSpan(0).GetSpanContext().SpanID).To(Equal(expectedSpanID))
+					if testOptions.supportsReference {
+						Expect(fakeClient.GetSpan(0).GetReferences()).ToNot(BeEmpty())
+						Expect(fakeClient.GetSpan(0).GetReference(0).GetSpanContext().SpanID).To(Equal(expectedParentSpanID))
+					}
+				})
+			})
+		})
 
-						context, err = tracer.Extract(BinaryCarrier, knownCarrier2)
-						Expect(context).To(BeEquivalentTo(knownContext2))
-						Expect(err).To(BeNil())
-					})
+		Describe("Binary Carriers", func() {
+			const knownCarrier1 = "EigJOjioEaYHBgcRNmifUO7/xlgYASISCgdjaGVja2VkEgdiYWdnYWdl"
+			const knownCarrier2 = "EigJEX+FpwZ/EmYR2gfYQbxCMskYASISCgdjaGVja2VkEgdiYWdnYWdl"
+			const badCarrier1 = "Y3QbxCMskYASISCgdjaGVja2VkEgd"
 
-					It("Should extract SpanContext from carrier as []byte", func() {
-						context, err := tracer.Extract(BinaryCarrier, []byte(knownCarrier1))
-						Expect(context).To(BeEquivalentTo(knownContext1))
-						Expect(err).To(BeNil())
+			var knownContext1 = SpanContext{
+				SpanID:  6397081719746291766,
+				TraceID: 506100417967962170,
+				Baggage: map[string]string{"checked": "baggage"},
+			}
+			var knownContext2 = SpanContext{
+				SpanID:  14497723526785009626,
+				TraceID: 7355080808006516497,
+				Baggage: map[string]string{"checked": "baggage"},
+			}
+			var testContext1 = SpanContext{
+				SpanID:  123,
+				TraceID: 456,
+				Baggage: nil,
+			}
+			var testContext2 = SpanContext{
+				SpanID:  123000000000,
+				TraceID: 456000000000,
+				Baggage: map[string]string{"a": "1", "b": "2", "c": "3"},
+			}
 
-						context, err = tracer.Extract(BinaryCarrier, []byte(knownCarrier2))
-						Expect(context).To(BeEquivalentTo(knownContext2))
-						Expect(err).To(BeNil())
-					})
+			Context("tracer inject", func() {
+				var carrierString string
+				var carrierBytes []byte
 
-					It("Should return nil for bad carriers", func() {
-						for _, carrier := range []interface{}{badCarrier1, []byte(badCarrier1), "", []byte(nil)} {
-							context, err := tracer.Extract(BinaryCarrier, carrier)
-							Expect(context).To(BeNil())
-							Expect(err).To(HaveOccurred())
-						}
-					})
+				BeforeEach(func() {
+					carrierString = ""
+					carrierBytes = []byte{}
+				})
+
+				It("Should support injecting into strings ", func() {
+					for _, origContext := range []SpanContext{knownContext1, knownContext2, testContext1, testContext2} {
+						err := tracer.Inject(origContext, BinaryCarrier, &carrierString)
+						Expect(err).ToNot(HaveOccurred())
+
+						context, err := tracer.Extract(BinaryCarrier, carrierString)
+						Expect(err).ToNot(HaveOccurred())
+						Expect(context).To(BeEquivalentTo(origContext))
+					}
+				})
+
+				It("Should support injecting into byte arrays", func() {
+					for _, origContext := range []SpanContext{knownContext1, knownContext2, testContext1, testContext2} {
+						err := tracer.Inject(origContext, BinaryCarrier, &carrierBytes)
+						Expect(err).ToNot(HaveOccurred())
+
+						context, err := tracer.Extract(BinaryCarrier, carrierBytes)
+						Expect(err).ToNot(HaveOccurred())
+						Expect(context).To(BeEquivalentTo(origContext))
+					}
+				})
+
+				It("Should return nil for nil contexts", func() {
+					err := tracer.Inject(nil, BinaryCarrier, carrierString)
+					Expect(err).To(HaveOccurred())
+
+					err = tracer.Inject(nil, BinaryCarrier, carrierBytes)
+					Expect(err).To(HaveOccurred())
+				})
+			})
+
+			Context("tracer extract", func() {
+				It("Should extract SpanContext from carrier as string", func() {
+					context, err := tracer.Extract(BinaryCarrier, knownCarrier1)
+					Expect(context).To(BeEquivalentTo(knownContext1))
+					Expect(err).To(BeNil())
+
+					context, err = tracer.Extract(BinaryCarrier, knownCarrier2)
+					Expect(context).To(BeEquivalentTo(knownContext2))
+					Expect(err).To(BeNil())
+				})
+
+				It("Should extract SpanContext from carrier as []byte", func() {
+					context, err := tracer.Extract(BinaryCarrier, []byte(knownCarrier1))
+					Expect(context).To(BeEquivalentTo(knownContext1))
+					Expect(err).To(BeNil())
+
+					context, err = tracer.Extract(BinaryCarrier, []byte(knownCarrier2))
+					Expect(context).To(BeEquivalentTo(knownContext2))
+					Expect(err).To(BeNil())
+				})
+
+				It("Should return nil for bad carriers", func() {
+					for _, carrier := range []interface{}{badCarrier1, []byte(badCarrier1), "", []byte(nil)} {
+						context, err := tracer.Extract(BinaryCarrier, carrier)
+						Expect(context).To(BeNil())
+						Expect(err).To(HaveOccurred())
+					}
 				})
 			})
 		})
 
 		Context("With custom log length", func() {
 			BeforeEach(func() {
-				options.AccessToken = "0987654321"
-				options.Collector = Endpoint{"localhost", port, true}
-				options.ReportingPeriod = 1 * time.Millisecond
-				options.MinReportingPeriod = 1 * time.Millisecond
-				options.ReportTimeout = 10 * time.Millisecond
 				options.MaxLogKeyLen = 10
 				options.MaxLogValueLen = 11
 			})
@@ -325,10 +328,12 @@ var _ = Describe("Tracer Transports", func() {
 						log.Int("life", 42),
 					)
 					span.Finish()
+
+					Flush(context.Background(), tracer)
 				})
 
 				It("Should send logs back to the collector", func() {
-					Eventually(fakeClient.GetSpansLen).Should(Equal(1))
+					Expect(fakeClient.GetSpansLen()).To(Equal(1))
 
 					obj, _ := json.Marshal([]interface{}{"gr", 8})
 
@@ -356,34 +361,20 @@ var _ = Describe("Tracer Transports", func() {
 
 		Context("With custom MaxBufferedSpans", func() {
 			BeforeEach(func() {
-				options.AccessToken = "0987654321"
-				options.Collector = Endpoint{"localhost", port, true}
-				options.ReportingPeriod = 1 * time.Millisecond
-				options.MinReportingPeriod = 1 * time.Millisecond
-				options.ReportTimeout = 10 * time.Millisecond
-				options.MaxLogKeyLen = 10
-				options.MaxLogValueLen = 11
 				options.MaxBufferedSpans = 10
 			})
 
 			Describe("SpanBuffer", func() {
 				It("should respect MaxBufferedSpans", func() {
-					startNSpans(10, tracer)
-					Eventually(fakeClient.GetSpansLen).Should(Equal(10))
-
-					startNSpans(10, tracer)
-					Eventually(fakeClient.GetSpansLen).Should(Equal(10))
+					startNSpans(20, tracer)
+					Flush(context.Background(), tracer)
+					Expect(fakeClient.GetSpansLen()).To(Equal(10))
 				})
 			})
 		})
 
 		Context("With DropSpanLogs set", func() {
 			BeforeEach(func() {
-				options.AccessToken = "0987654321"
-				options.Collector = Endpoint{"localhost", port, true}
-				options.ReportingPeriod = 1 * time.Millisecond
-				options.MinReportingPeriod = 1 * time.Millisecond
-				options.ReportTimeout = 10 * time.Millisecond
 				options.DropSpanLogs = true
 			})
 
@@ -393,7 +384,9 @@ var _ = Describe("Tracer Transports", func() {
 				span.SetTag("tag", "value")
 				span.Finish()
 
-				Eventually(fakeClient.GetSpansLen).Should(Equal(1))
+				Flush(context.Background(), tracer)
+
+				Expect(fakeClient.GetSpansLen()).To(Equal(1))
 				Expect(fakeClient.GetSpan(0).GetOperationName()).To(Equal("x"))
 				Expect(fakeClient.GetSpan(0).GetTags()).To(HaveKeyValues(KeyValue("tag", "value")))
 				Expect(fakeClient.GetSpan(0).GetLogs()).To(BeEmpty())
@@ -402,11 +395,6 @@ var _ = Describe("Tracer Transports", func() {
 
 		Context("With MaxLogsPerSpan set", func() {
 			BeforeEach(func() {
-				options.AccessToken = "0987654321"
-				options.Collector = Endpoint{"localhost", port, true}
-				options.ReportingPeriod = 1 * time.Millisecond
-				options.MinReportingPeriod = 1 * time.Millisecond
-				options.ReportTimeout = 10 * time.Millisecond
 				options.MaxLogsPerSpan = 10
 			})
 
@@ -418,7 +406,9 @@ var _ = Describe("Tracer Transports", func() {
 				}
 				span.Finish()
 
-				Eventually(fakeClient.GetSpansLen).Should(Equal(1))
+				Flush(context.Background(), tracer)
+
+				Expect(fakeClient.GetSpansLen()).To(Equal(1))
 				Expect(fakeClient.GetSpan(0).GetOperationName()).To(Equal("span"))
 				Expect(fakeClient.GetSpan(0).GetLogs()).To(HaveLen(10))
 
@@ -439,7 +429,9 @@ var _ = Describe("Tracer Transports", func() {
 				}
 				span.Finish()
 
-				Eventually(fakeClient.GetSpansLen).Should(Equal(1))
+				Flush(context.Background(), tracer)
+
+				Expect(fakeClient.GetSpansLen()).To(Equal(1))
 				Expect(fakeClient.GetSpan(0).GetOperationName()).To(Equal("span"))
 				Expect(fakeClient.GetSpan(0).GetLogs()).To(HaveLen(10))
 
@@ -496,6 +488,7 @@ var _ = Describe("Tracer Transports", func() {
 	Context("with grpc enabled", func() {
 		BeforeEach(func() {
 			options.UseGRPC = true
+			options.AccessToken = "0987654321"
 			fakeClient = newGrpcFakeClient()
 		})
 
@@ -509,6 +502,7 @@ var _ = Describe("Tracer Transports", func() {
 	Context("with thrift enabled", func() {
 		BeforeEach(func() {
 			options.UseThrift = true
+			options.AccessToken = "0987654321"
 			fakeClient = newThriftFakeClient()
 		})
 
