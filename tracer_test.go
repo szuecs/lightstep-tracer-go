@@ -16,6 +16,7 @@ import (
 	"github.com/lightstep/lightstep-tracer-go/lightstepfakes"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
+	opentracing "github.com/opentracing/opentracing-go"
 )
 
 var _ = Describe("Tracer", func() {
@@ -282,6 +283,38 @@ var _ = Describe("Tracer", func() {
 		It("doesn't call RecordSpan after finishing a span", func() {
 			span := tracer.StartSpan("span")
 			Expect(span.Finish).ToNot(Panic())
+		})
+	})
+
+	Describe("provides its ReporterID", func() {
+		BeforeEach(func() {
+			opts = Options{
+				AccessToken: accessToken,
+				ConnFactory: fakeConn,
+				Recorder:    nil,
+			}
+		})
+
+		It("is non-zero", func() {
+			rid, err := GetLightStepReporterID(tracer)
+			Expect(err).To(BeNil())
+			Expect(rid).To(Not(BeZero()))
+		})
+	})
+})
+
+var _ = Describe("UnsupportedTracer", func() {
+	type unsupportedTracer struct {
+		opentracing.Tracer
+	}
+
+	tracer := unsupportedTracer{}
+
+	Describe("has no ReporterID", func() {
+		It("is an error", func() {
+			rid, err := GetLightStepReporterID(tracer)
+			Expect(err).To(Not(BeNil()))
+			Expect(rid).To(BeZero())
 		})
 	})
 })
