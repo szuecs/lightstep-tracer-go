@@ -55,11 +55,11 @@ import (
 func shutdown(ctx context.Context) {
   // access the running tracer
   tracer := opentracing.GlobalTracer()
-    
+
   // typecast from opentracing.Tracer to lightstep.Tracer
   lsTracer, ok := tracer.(lightstep.Tracer)
-  if (!ok) { 
-    return 
+  if (!ok) {
+    return
   }
   lsTracer.Close(ctx)
 
@@ -92,7 +92,7 @@ logAndMetricsHandler := func(event lightstep.Event){
 func main() {
   // setup event handler first to catch startup errors
   lightstep.OnEvent(logAndMetricsHandler)
-  
+
   lightstepTracer := lightstep.NewTracer(lightstep.Options{
     AccessToken: "YourAccessToken",
   })
@@ -114,3 +114,11 @@ There are three total options for transport protocols:
 - \[ EXPERIMENTAL \] [Protocol Buffers](https://developers.google.com/protocol-buffers/) over HTTP - New transport protocol supported for use cases where GRPC isn't an option. In order to enable HTTP you will need to configure the LightStep collectors receiving the data to accept HTTP traffic. Reach out to LightStep for support in this.
 
 You can configure which transport protocol the tracer uses using the `UseGRPC`, `UseThrift`, and `UseHttp` flags in the options.
+
+### Release Process
+
+Release versions follow [semantic versioning](https://semver.org/) conventions.
+
+1. Update CHANGELOG.md with the changes going into the release and new version string.
+2. Update VERSION with the new version string.
+3. Create a github release with the new version string.
