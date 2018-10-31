@@ -1,3 +1,23 @@
 [prune]
   go-tests = true
   unused-packages = true
+
+[[override]]
+  name = "gopkg.in/fsnotify.v1"
+  source = "https://github.com/fsnotify/fsnotify"
+
+[[constraint]]
+  name = "github.com/onsi/ginkgo"
+  version = "1.6.0"
+
+[[constraint]]
+  name = "github.com/onsi/gomega"
+  version = "1.4.2"
+
+[[constraint]]
+  name = "github.com/opentracing/opentracing-go"
+  version = "1.0.0"
+
+[[constraint]]
+  name = "github.com/lightstep/lightstep-tracer-common"
+  version = "1.0.1"

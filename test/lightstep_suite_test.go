@@ -2,6 +2,7 @@ package lightstep_test
 
 import (
 	"bytes"
+	"context"
 	"io"
 
 	lightstep "github.com/lightstep/lightstep-tracer-go"
@@ -32,10 +33,103 @@ var (
 
 func testTracer(deps *testDependencies) {
 	var (
+		satellite testSatellite
+
 		subject *lightstep.Tracer
 	)
 
+	testReporting := func(reportFn func()) {
+		It("successfully serializes and sends finished spans", func() {
+			operationName1 := "test-operation-1"
+			span := subject.StartSpan(operationName1)
+			span.Finish()
+			operationName2 := "test-operation-2"
+			span = subject.StartSpan(operationName2)
+			span.Finish()
+
+			Expect(satellite.ReportedSpans()).To(BeEmpty())
+
+			reportFn()
+
+			Eventually(satellite.ReportedSpans).Should(Not(BeEmpty()))
+			Eventually(satellite.ReportedSpans).Should(ContainElement(ReportedSpan{
+				OperationName: operationName1,
+			}))
+			Eventually(satellite.ReportedSpans).Should(ContainElement(ReportedSpan{
+				OperationName: operationName2,
+			}))
+		})
+
+		It("can send multiple span reports", func() {
+			operationName := "test1"
+			span := subject.StartSpan(operationName)
+
+			span.Finish()
+			reportFn()
+			Eventually(satellite.ReportedSpans).Should(ContainElement(ReportedSpan{
+				OperationName: operationName,
+			}))
+
+			operationName = "test2"
+			span = subject.StartSpan(operationName)
+
+			span.Finish()
+			reportFn()
+			Eventually(satellite.ReportedSpans).Should(ContainElement(ReportedSpan{
+				OperationName: operationName,
+			}))
+		})
+
+		It("does not send unfinished spans", func() {
+			operationName := "test"
+			_ = subject.StartSpan(operationName)
+
+			reportFn()
+
+			Consistently(satellite.ReportedSpans).Should(Not(ContainElement(ReportedSpan{
+				OperationName: operationName,
+			})))
+		})
+
+		It("does not double-send spans that are finished multiple times", func() {
+			operationName := "test"
+			span := subject.StartSpan(operationName)
+
+			Expect(satellite.ReportedSpans()).To(BeEmpty())
+
+			span.Finish()
+			span.Finish()
+			reportFn()
+
+			expectedSpan := ReportedSpan{
+				OperationName: operationName,
+			}
+			Eventually(satellite.ReportedSpans).Should(ContainElement(expectedSpan))
+
+			containsDuplicates := func() bool {
+				found := false
+				for _, s := range satellite.ReportedSpans() {
+					if s == expectedSpan {
+						if found {
+							return true
+						}
+
+						found = true
+					}
+				}
+
+				return false
+			}
+			Consistently(containsDuplicates).Should(BeFalse())
+
+			span.Finish()
+			reportFn()
+			Consistently(containsDuplicates).Should(BeFalse())
+		})
+	}
+
 	BeforeEach(func() {
+		satellite = deps.satellite
 		subject = lightstep.NewTracer(accessToken, deps.options...)
 	})
 
@@ -283,10 +377,26 @@ func testTracer(deps *testDependencies) {
 			Expect(err).To(MatchError(opentracing.ErrUnsupportedFormat))
 		})
 	})
+
+	Describe("#Flush", func() {
+		testReporting(func() {
+			err := subject.Flush(context.Background())
+			Expect(err).To(Succeed())
+		})
+	})
+}
+
+type testSatellite interface {
+	ReportedSpans() []ReportedSpan
+}
+
+type ReportedSpan struct {
+	OperationName string
 }
 
 type testDependencies struct {
-	options []lightstep.Option
+	options   []lightstep.Option
+	satellite testSatellite
 }
 
 type invalidSpanContextMissingTraceID struct {
