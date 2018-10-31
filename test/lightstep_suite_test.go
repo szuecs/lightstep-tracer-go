@@ -4,8 +4,12 @@ import (
 	"bytes"
 	"context"
 	"io"
+	"time"
 
 	lightstep "github.com/lightstep/lightstep-tracer-go"
+	"github.com/lightstep/lightstep-tracer-go/internal"
+	"github.com/lightstep/lightstep-tracer-go/internal/timex"
+	"github.com/lightstep/lightstep-tracer-go/internal/timex/testtimex"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	opentracing "github.com/opentracing/opentracing-go"
@@ -33,6 +37,8 @@ var (
 
 func testTracer(deps *testDependencies) {
 	var (
+		clock timex.Clock
+
 		satellite testSatellite
 
 		subject *lightstep.Tracer
@@ -143,7 +149,11 @@ func testTracer(deps *testDependencies) {
 	}
 
 	BeforeEach(func() {
+		clock = testtimex.NewClock(time.Now())
+
 		satellite = deps.satellite
+		deps.options = append(deps.options, internal.WithClock(clock))
+
 		subject = lightstep.NewTracer(accessToken, deps.options...)
 	})
 
@@ -157,6 +167,40 @@ func testTracer(deps *testDependencies) {
 		var tracer opentracing.Tracer
 		tracer = subject
 		Expect(tracer).NotTo(BeNil())
+	})
+
+	It("does not send any spans before the report interval is reached", func() {
+		if subject != nil {
+			err := subject.Close(context.Background())
+			Expect(err).To(Succeed())
+		}
+
+		reportInterval := time.Hour
+		opts := append(deps.options, lightstep.WithReportInterval(reportInterval))
+		subject = lightstep.NewTracer(accessToken, opts...)
+
+		span := subject.StartSpan("test")
+		span.Finish()
+
+		Consistently(satellite.ReportedSpans()).Should(BeEmpty())
+	})
+
+	Context("when the report interval is reached", func() {
+		reportInterval := time.Nanosecond
+
+		BeforeEach(func() {
+			if subject != nil {
+				err := subject.Close(context.Background())
+				Expect(err).To(Succeed())
+			}
+
+			opts := append(deps.options, lightstep.WithReportInterval(reportInterval))
+			subject = lightstep.NewTracer(accessToken, opts...)
+		})
+
+		testReporting(func() {
+			clock.Sleep(lightstep.DefaultReportInterval)
+		})
 	})
 
 	Describe("#StartSpan", func() {
@@ -398,6 +442,18 @@ func testTracer(deps *testDependencies) {
 	})
 
 	Describe("#Flush", func() {
+		BeforeEach(func() {
+			if subject != nil {
+				err := subject.Close(context.Background())
+				Expect(err).To(Succeed())
+			}
+
+			// Guard against false positives (including race conditions) caused by the run loop
+			// either triggering or being disabled
+			opts := append(deps.options, lightstep.WithReportInterval(time.Hour*1000))
+			subject = lightstep.NewTracer(accessToken, opts...)
+		})
+
 		testReporting(func() {
 			err := subject.Flush(context.Background())
 			Expect(err).To(Succeed())

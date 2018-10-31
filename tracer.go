@@ -6,12 +6,14 @@ import (
 	"sync"
 
 	"github.com/lightstep/lightstep-tracer-go/internal"
+	"github.com/lightstep/lightstep-tracer-go/internal/timex"
 	opentracing "github.com/opentracing/opentracing-go"
 )
 
 type Tracer struct {
 	lock     *sync.Mutex
 	closed   bool
+	ticker   timex.Ticker
 	spans    []internal.Span
 	recorder internal.RecordSpan
 	client   internal.Client
@@ -25,6 +27,7 @@ func NewTracer(accessToken string, opts ...Option) *Tracer {
 
 	t := &Tracer{
 		lock:   &sync.Mutex{},
+		ticker: c.Clock.NewTicker(c.ReportInterval),
 		client: c.Client,
 	}
 	t.recorder = func(span internal.Span) {
@@ -35,6 +38,8 @@ func NewTracer(accessToken string, opts ...Option) *Tracer {
 			t.spans = append(t.spans, span)
 		}
 	}
+
+	t.runLoop()
 
 	return t
 }
@@ -99,6 +104,7 @@ func (t *Tracer) Close(ctx context.Context) error {
 	defer t.lock.Unlock()
 
 	t.closed = true
+	t.ticker.Stop()
 
 	return nil
 }
@@ -119,4 +125,12 @@ func (t *Tracer) runReport(ctx context.Context) error {
 
 	_, err := t.client.Report(ctx, req)
 	return err
+}
+
+func (t *Tracer) runLoop() {
+	go func() {
+		for range t.ticker.C() {
+			go t.runReport(context.Background())
+		}
+	}()
 }
