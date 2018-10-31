@@ -11,6 +11,7 @@ import (
 
 type Tracer struct {
 	lock     *sync.Mutex
+	closed   bool
 	spans    []internal.Span
 	recorder internal.RecordSpan
 	client   internal.Client
@@ -29,7 +30,10 @@ func NewTracer(accessToken string, opts ...Option) *Tracer {
 	t.recorder = func(span internal.Span) {
 		t.lock.Lock()
 		defer t.lock.Unlock()
-		t.spans = append(t.spans, span)
+
+		if !t.closed {
+			t.spans = append(t.spans, span)
+		}
 	}
 
 	return t
@@ -90,10 +94,20 @@ func (t *Tracer) Flush(ctx context.Context) error {
 	return t.runReport(ctx)
 }
 
+func (t *Tracer) Close(ctx context.Context) error {
+	t.lock.Lock()
+	defer t.lock.Unlock()
+
+	t.closed = true
+
+	return nil
+}
+
 func (t *Tracer) runReport(ctx context.Context) error {
 	t.lock.Lock()
 
 	var req internal.ReportRequest
+
 	for _, span := range t.spans {
 		req.Spans = append(req.Spans, internal.SpanRequest{
 			OperationName: span.OperationName(),

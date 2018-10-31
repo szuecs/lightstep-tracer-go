@@ -126,11 +126,30 @@ func testTracer(deps *testDependencies) {
 			reportFn()
 			Consistently(containsDuplicates).Should(BeFalse())
 		})
+
+		It("does not send any spans if the tracer is closed", func() {
+			subject.Close(context.Background())
+
+			operationName := "test"
+			span := subject.StartSpan(operationName)
+			span.Finish()
+
+			reportFn()
+
+			Consistently(satellite.ReportedSpans).Should(Not(ContainElement(ReportedSpan{
+				OperationName: operationName,
+			})))
+		})
 	}
 
 	BeforeEach(func() {
 		satellite = deps.satellite
 		subject = lightstep.NewTracer(accessToken, deps.options...)
+	})
+
+	AfterEach(func() {
+		err := subject.Close(context.Background())
+		Expect(err).To(Succeed())
 	})
 
 	It("complies with the OpenTracing standard", func() {
