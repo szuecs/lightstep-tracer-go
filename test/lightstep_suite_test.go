@@ -185,19 +185,24 @@ func testTracer(deps *testDependencies) {
 		Consistently(satellite.ReportedSpans()).Should(BeEmpty())
 	})
 
+	It("does not send any spans if the report loop is disabled", func() {
+		if subject != nil {
+			err := subject.Close(context.Background())
+			Expect(err).To(Succeed())
+		}
+
+		opts := append(deps.options, lightstep.WithReportInterval(0))
+		subject = lightstep.NewTracer(accessToken, opts...)
+
+		span := subject.StartSpan("test")
+		span.Finish()
+
+		clock.Sleep(time.Hour)
+
+		Consistently(satellite.ReportedSpans).Should(BeEmpty())
+	})
+
 	Context("when the report interval is reached", func() {
-		reportInterval := time.Nanosecond
-
-		BeforeEach(func() {
-			if subject != nil {
-				err := subject.Close(context.Background())
-				Expect(err).To(Succeed())
-			}
-
-			opts := append(deps.options, lightstep.WithReportInterval(reportInterval))
-			subject = lightstep.NewTracer(accessToken, opts...)
-		})
-
 		testReporting(func() {
 			clock.Sleep(lightstep.DefaultReportInterval)
 		})

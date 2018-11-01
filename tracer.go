@@ -27,7 +27,6 @@ func NewTracer(accessToken string, opts ...Option) *Tracer {
 
 	t := &Tracer{
 		lock:   &sync.Mutex{},
-		ticker: c.Clock.NewTicker(c.ReportInterval),
 		client: c.Client,
 	}
 	t.recorder = func(span internal.Span) {
@@ -39,6 +38,9 @@ func NewTracer(accessToken string, opts ...Option) *Tracer {
 		}
 	}
 
+	if c.ReportInterval != 0 {
+		t.ticker = c.Clock.NewTicker(c.ReportInterval)
+	}
 	t.runLoop()
 
 	return t
@@ -104,7 +106,10 @@ func (t *Tracer) Close(ctx context.Context) error {
 	defer t.lock.Unlock()
 
 	t.closed = true
-	t.ticker.Stop()
+
+	if t.ticker != nil {
+		t.ticker.Stop()
+	}
 
 	return nil
 }
@@ -128,9 +133,11 @@ func (t *Tracer) runReport(ctx context.Context) error {
 }
 
 func (t *Tracer) runLoop() {
-	go func() {
-		for range t.ticker.C() {
-			go t.runReport(context.Background())
-		}
-	}()
+	if t.ticker != nil {
+		go func() {
+			for range t.ticker.C() {
+				go t.runReport(context.Background())
+			}
+		}()
+	}
 }
