@@ -3,6 +3,7 @@ package lightstep_test
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"io"
 	"time"
 
@@ -169,7 +170,7 @@ func testTracer(deps *testDependencies) {
 		Expect(tracer).NotTo(BeNil())
 	})
 
-	It("does not send any spans before the report interval is reached", func() {
+	It("does not send any spans before the report interval is reached or the max buffer size is exceeded", func() {
 		if subject != nil {
 			err := subject.Close(context.Background())
 			Expect(err).To(Succeed())
@@ -185,7 +186,7 @@ func testTracer(deps *testDependencies) {
 		Consistently(satellite.ReportedSpans()).Should(BeEmpty())
 	})
 
-	It("does not send any spans if the report loop is disabled", func() {
+	It("does not send any spans if the report interval is disabled and the max buffer size has not been exceeded", func() {
 		if subject != nil {
 			err := subject.Close(context.Background())
 			Expect(err).To(Succeed())
@@ -205,6 +206,15 @@ func testTracer(deps *testDependencies) {
 	Context("when the report interval is reached", func() {
 		testReporting(func() {
 			clock.Sleep(lightstep.DefaultReportInterval)
+		})
+	})
+
+	Context("when the max span buffer size is reached", func() {
+		testReporting(func() {
+			for i := 0; i < lightstep.DefaultMaxBufferedSpans; i++ {
+				span := subject.StartSpan(fmt.Sprintf("extra-span-%d", i))
+				span.Finish()
+			}
 		})
 	})
 

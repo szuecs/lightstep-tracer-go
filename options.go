@@ -8,7 +8,8 @@ import (
 )
 
 const (
-	DefaultReportInterval = time.Second * 3
+	DefaultReportInterval   = time.Second * 3
+	DefaultMaxBufferedSpans = 1000
 )
 
 type Option func(*internal.TracerConfig)
@@ -19,10 +20,17 @@ func WithReportInterval(reportInterval time.Duration) Option {
 	}
 }
 
+func WithMaxBuffedSpans(maxBufferedSpans int) Option {
+	return func(c *internal.TracerConfig) {
+		c.MaxBufferedSpans = maxBufferedSpans
+	}
+}
+
 func defaultConfig() *internal.TracerConfig {
 	return &internal.TracerConfig{
-		Client:         internal.NoopClient{},
-		ReportInterval: DefaultReportInterval,
-		Clock:          timex.NewClock(),
+		Client:           internal.NoopClient{},
+		ReportInterval:   DefaultReportInterval,
+		MaxBufferedSpans: DefaultMaxBufferedSpans,
+		Clock:            timex.NewClock(),
 	}
 }

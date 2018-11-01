@@ -7,9 +7,10 @@ import (
 )
 
 type TracerConfig struct {
-	Client         Client
-	ReportInterval time.Duration
-	Clock          timex.Clock
+	Client           Client
+	ReportInterval   time.Duration
+	MaxBufferedSpans int
+	Clock            timex.Clock
 }
 
 func WithClock(clock timex.Clock) func(*TracerConfig) {

@@ -11,12 +11,13 @@ import (
 )
 
 type Tracer struct {
-	lock     *sync.Mutex
-	closed   bool
-	ticker   timex.Ticker
-	spans    []internal.Span
-	recorder internal.RecordSpan
-	client   internal.Client
+	lock             *sync.Mutex
+	closed           bool
+	ticker           timex.Ticker
+	maxBufferedSpans int
+	spans            []internal.Span
+	recorder         internal.RecordSpan
+	client           internal.Client
 }
 
 func NewTracer(accessToken string, opts ...Option) *Tracer {
@@ -26,8 +27,9 @@ func NewTracer(accessToken string, opts ...Option) *Tracer {
 	}
 
 	t := &Tracer{
-		lock:   &sync.Mutex{},
-		client: c.Client,
+		lock:             &sync.Mutex{},
+		maxBufferedSpans: c.MaxBufferedSpans,
+		client:           c.Client,
 	}
 	t.recorder = func(span internal.Span) {
 		t.lock.Lock()
@@ -35,6 +37,10 @@ func NewTracer(accessToken string, opts ...Option) *Tracer {
 
 		if !t.closed {
 			t.spans = append(t.spans, span)
+
+			if len(t.spans) == t.maxBufferedSpans {
+				go t.runReport(context.Background())
+			}
 		}
 	}
 
