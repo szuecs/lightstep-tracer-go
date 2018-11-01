@@ -203,6 +203,23 @@ func testTracer(deps *testDependencies) {
 		Consistently(satellite.ReportedSpans).Should(BeEmpty())
 	})
 
+	It("does not send any spans if the span buffer max is disabled and the report interval has not been reached", func() {
+		if subject != nil {
+			err := subject.Close(context.Background())
+			Expect(err).To(Succeed())
+		}
+
+		opts := append(deps.options, lightstep.WithMaxBuffedSpans(0))
+		subject = lightstep.NewTracer(accessToken, opts...)
+
+		for i := 0; i < lightstep.DefaultMaxBufferedSpans*2; i++ {
+			span := subject.StartSpan(fmt.Sprintf("test-%d", i))
+			span.Finish()
+		}
+
+		Consistently(satellite.ReportedSpans).Should(BeEmpty())
+	})
+
 	Context("when the report interval is reached", func() {
 		testReporting(func() {
 			clock.Sleep(lightstep.DefaultReportInterval)
