@@ -3,7 +3,9 @@ package lightstepgrpc
 import (
 	"context"
 	"crypto/tls"
+	"time"
 
+	"github.com/gogo/protobuf/types"
 	"github.com/lightstep/lightstep-tracer-common/golang/gogo/collectorpb"
 	lightstep "github.com/lightstep/lightstep-tracer-go"
 	"github.com/lightstep/lightstep-tracer-go/internal"
@@ -74,27 +76,39 @@ func defaultConfig() *config {
 }
 
 type client struct {
-	conn      *grpc.ClientConn
-	satellite collectorpb.CollectorServiceClient
-}
-
-func dial(addr string, opts ...grpc.DialOption) (*client, error) {
-	conn, err := grpc.Dial(addr, opts...)
-	if err != nil {
-		return nil, err
-	}
-
-	return &client{
-		conn:      conn,
-		satellite: collectorpb.NewCollectorServiceClient(conn),
-	}, nil
+	accessToken string
+	conn        *grpc.ClientConn
+	satellite   collectorpb.CollectorServiceClient
 }
 
 func (c *client) Report(ctx context.Context, req internal.ReportRequest) (internal.ReportResponse, error) {
-	pReq := &collectorpb.ReportRequest{}
+	pReq := &collectorpb.ReportRequest{
+		Auth: &collectorpb.Auth{
+			AccessToken: c.accessToken,
+		},
+		Reporter: &collectorpb.Reporter{
+			ReporterId: 1,
+		},
+	}
+
+	pReq.Reporter.Tags = append(pReq.Reporter.Tags, &collectorpb.KeyValue{
+		Key:   "lightstep.component_name",
+		Value: &collectorpb.KeyValue_StringValue{StringValue: "test"},
+	})
 	for _, span := range req.Spans {
+		end := time.Now()
+		start := end.Add(time.Second * -1)
 		pReq.Spans = append(pReq.Spans, &collectorpb.Span{
 			OperationName: span.OperationName,
+			SpanContext: &collectorpb.SpanContext{
+				TraceId: 123,
+				SpanId:  456,
+			},
+			StartTimestamp: &types.Timestamp{
+				Seconds: start.Unix(),
+				Nanos:   int32(start.Nanosecond()),
+			},
+			DurationMicros: uint64(time.Second / time.Microsecond),
 		})
 	}
 
