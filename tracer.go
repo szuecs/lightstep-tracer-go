@@ -109,7 +109,8 @@ func (t *Tracer) Extract(format interface{}, carrier interface{}) (opentracing.S
 }
 
 func (t *Tracer) Flush(ctx context.Context) error {
-	return t.runReport(ctx)
+	t.runReport(ctx)
+	return nil
 }
 
 func (t *Tracer) Close(ctx context.Context) error {
@@ -122,10 +123,10 @@ func (t *Tracer) Close(ctx context.Context) error {
 		t.ticker.Stop()
 	}
 
-	return nil
+	return t.client.Close(ctx)
 }
 
-func (t *Tracer) runReport(ctx context.Context) error {
+func (t *Tracer) runReport(ctx context.Context) {
 	t.lock.Lock()
 
 	var req internal.ReportRequest
@@ -139,8 +140,7 @@ func (t *Tracer) runReport(ctx context.Context) error {
 
 	t.lock.Unlock()
 
-	_, err := t.client.Report(ctx, req)
-	return err
+	t.client.Report(ctx, req) // TODO: handle error
 }
 
 func (t *Tracer) runLoop() {

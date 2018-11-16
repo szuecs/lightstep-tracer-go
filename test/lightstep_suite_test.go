@@ -14,6 +14,7 @@ import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	opentracing "github.com/opentracing/opentracing-go"
+	"google.golang.org/grpc/grpclog"
 
 	"testing"
 )
@@ -22,6 +23,13 @@ func TestLightStep(t *testing.T) {
 	RegisterFailHandler(Fail)
 	RunSpecs(t, "LightStep Suite")
 }
+
+var _ = BeforeSuite(func() {
+	// Hack: gRPC normally emits logs if requests get sent when the client is already closed or closing.
+	// However, some tests deliberately send requests to a closed client.
+	writer := noopWriter{}
+	grpclog.SetLoggerV2(grpclog.NewLoggerV2WithVerbosity(writer, writer, writer, 100))
+})
 
 const (
 	accessToken = "test access token"
@@ -545,3 +553,9 @@ type invalidSpanContextWrongSpanIDType struct {
 }
 
 func (sc invalidSpanContextWrongSpanIDType) ForeachBaggageItem(func(string, string) bool) {}
+
+type noopWriter struct{}
+
+func (w noopWriter) Write(p []byte) (int, error) {
+	return len(p), nil
+}

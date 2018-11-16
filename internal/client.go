@@ -6,6 +6,7 @@ import (
 
 type Client interface {
 	Report(context.Context, ReportRequest) (ReportResponse, error)
+	Close(context.Context) error
 }
 
 type ReportRequest struct {
@@ -22,4 +23,8 @@ type NoopClient struct{}
 
 func (c NoopClient) Report(context.Context, ReportRequest) (ReportResponse, error) {
 	return ReportResponse{}, nil
+}
+
+func (c NoopClient) Close(context.Context) error {
+	return nil
 }

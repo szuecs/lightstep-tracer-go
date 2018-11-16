@@ -102,3 +102,11 @@ func (c *client) Report(ctx context.Context, req internal.ReportRequest) (intern
 	_, err := c.satellite.Report(ctx, pReq)
 	return res, err
 }
+
+func (c *client) Close(context.Context) error {
+	err := c.conn.Close()
+	if err != grpc.ErrClientConnClosing {
+		return err
+	}
+	return nil
+}
