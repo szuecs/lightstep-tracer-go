@@ -36,7 +36,7 @@ var _ = Describe("gRPCTransport", func() {
 	})
 
 	AfterEach(func() {
-		server.Stop()
+		server.GracefulStop()
 	})
 
 	testTracer(&deps)
