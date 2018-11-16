@@ -7,7 +7,7 @@ import (
 )
 
 type TracerConfig struct {
-	Client           Client
+	ClientFactory    func(accessToken string) (Client, error)
 	ReportInterval   time.Duration
 	MaxBufferedSpans int
 	Clock            timex.Clock

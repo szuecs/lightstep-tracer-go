@@ -28,7 +28,9 @@ func WithMaxBuffedSpans(maxBufferedSpans int) Option {
 
 func defaultConfig() *internal.TracerConfig {
 	return &internal.TracerConfig{
-		Client:           internal.NoopClient{},
+		ClientFactory: func(string) (internal.Client, error) {
+			return internal.NoopClient{}, nil
+		},
 		ReportInterval:   DefaultReportInterval,
 		MaxBufferedSpans: DefaultMaxBufferedSpans,
 		Clock:            timex.NewClock(),

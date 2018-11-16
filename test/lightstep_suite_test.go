@@ -155,7 +155,9 @@ func testTracer(deps *testDependencies) {
 		satellite = deps.satellite
 		deps.options = append(deps.options, internal.WithClock(clock))
 
-		subject = lightstep.NewTracer(accessToken, deps.options...)
+		var err error
+		subject, err = lightstep.NewTracer(accessToken, deps.options...)
+		Expect(err).To(Succeed())
 	})
 
 	AfterEach(func() {
@@ -178,7 +180,10 @@ func testTracer(deps *testDependencies) {
 
 		reportInterval := time.Hour
 		opts := append(deps.options, lightstep.WithReportInterval(reportInterval))
-		subject = lightstep.NewTracer(accessToken, opts...)
+
+		var err error
+		subject, err = lightstep.NewTracer(accessToken, opts...)
+		Expect(err).To(Succeed())
 
 		span := subject.StartSpan("test")
 		span.Finish()
@@ -193,7 +198,10 @@ func testTracer(deps *testDependencies) {
 		}
 
 		opts := append(deps.options, lightstep.WithReportInterval(0))
-		subject = lightstep.NewTracer(accessToken, opts...)
+
+		var err error
+		subject, err = lightstep.NewTracer(accessToken, opts...)
+		Expect(err).To(Succeed())
 
 		span := subject.StartSpan("test")
 		span.Finish()
@@ -210,7 +218,10 @@ func testTracer(deps *testDependencies) {
 		}
 
 		opts := append(deps.options, lightstep.WithMaxBuffedSpans(0))
-		subject = lightstep.NewTracer(accessToken, opts...)
+
+		var err error
+		subject, err = lightstep.NewTracer(accessToken, opts...)
+		Expect(err).To(Succeed())
 
 		for i := 0; i < lightstep.DefaultMaxBufferedSpans*2; i++ {
 			span := subject.StartSpan(fmt.Sprintf("test-%d", i))
@@ -483,7 +494,10 @@ func testTracer(deps *testDependencies) {
 			// Guard against false positives (including race conditions) caused by the run loop
 			// either triggering or being disabled
 			opts := append(deps.options, lightstep.WithReportInterval(time.Hour*1000))
-			subject = lightstep.NewTracer(accessToken, opts...)
+
+			var err error
+			subject, err = lightstep.NewTracer(accessToken, opts...)
+			Expect(err).To(Succeed())
 		})
 
 		testReporting(func() {

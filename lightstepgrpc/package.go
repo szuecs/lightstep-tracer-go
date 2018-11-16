@@ -15,7 +15,7 @@ const (
 	DefaultAddr = "localhost:8080" // TODO
 )
 
-func WithGRPC(opts ...Option) (lightstep.Option, error) {
+func WithGRPC(opts ...Option) lightstep.Option {
 	c := defaultConfig()
 	for _, opt := range opts {
 		opt(c)
@@ -28,14 +28,22 @@ func WithGRPC(opts ...Option) (lightstep.Option, error) {
 		dialOptions = append(dialOptions, grpc.WithTransportCredentials(credentials.NewTLS(c.tlsConfig)))
 	}
 
-	client, err := dial(c.addr, dialOptions...)
-	if err != nil {
-		return nil, err
-	}
+	addr := c.addr
 
-	return func(c *internal.TracerConfig) {
-		c.Client = client
-	}, nil
+	return func(tc *internal.TracerConfig) {
+		tc.ClientFactory = func(accessToken string) (internal.Client, error) {
+			conn, err := grpc.Dial(addr, dialOptions...)
+			if err != nil {
+				return nil, err
+			}
+
+			return &client{
+				accessToken: accessToken,
+				conn:        conn,
+				satellite:   collectorpb.NewCollectorServiceClient(conn),
+			}, nil
+		}
+	}
 }
 
 type Option func(*config)

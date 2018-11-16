@@ -30,10 +30,7 @@ var _ = Describe("gRPCTransport", func() {
 		listener, err := net.Listen("tcp", "localhost:")
 		Expect(err).To(Succeed())
 
-		clientOpt, err := lightstepgrpc.WithGRPC(lightstepgrpc.WithAddress(listener.Addr().String()), lightstepgrpc.WithInsecure())
-		Expect(err).To(Succeed())
-
-		deps.options = append(deps.options, clientOpt)
+		deps.options = append(deps.options, lightstepgrpc.WithGRPC(lightstepgrpc.WithAddress(listener.Addr().String()), lightstepgrpc.WithInsecure()))
 
 		go server.Serve(listener)
 	})

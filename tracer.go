@@ -20,16 +20,21 @@ type Tracer struct {
 	client           internal.Client
 }
 
-func NewTracer(accessToken string, opts ...Option) *Tracer {
+func NewTracer(accessToken string, opts ...Option) (*Tracer, error) {
 	c := defaultConfig()
 	for _, opt := range opts {
 		opt(c)
 	}
 
+	client, err := c.ClientFactory(accessToken)
+	if err != nil {
+		return nil, err
+	}
+
 	t := &Tracer{
 		lock:             &sync.Mutex{},
 		maxBufferedSpans: c.MaxBufferedSpans,
-		client:           c.Client,
+		client:           client,
 	}
 	t.recorder = func(span internal.Span) {
 		t.lock.Lock()
@@ -49,7 +54,7 @@ func NewTracer(accessToken string, opts ...Option) *Tracer {
 	}
 	t.runLoop()
 
-	return t
+	return t, nil
 }
 
 func (t *Tracer) StartSpan(operationName string, opts ...opentracing.StartSpanOption) opentracing.Span {
