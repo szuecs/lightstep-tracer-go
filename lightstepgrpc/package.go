@@ -2,11 +2,13 @@ package lightstepgrpc
 
 import (
 	"context"
+	"crypto/tls"
 
 	"github.com/lightstep/lightstep-tracer-common/golang/gogo/collectorpb"
 	lightstep "github.com/lightstep/lightstep-tracer-go"
 	"github.com/lightstep/lightstep-tracer-go/internal"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials"
 )
 
 const (
@@ -19,7 +21,14 @@ func WithGRPC(opts ...Option) (lightstep.Option, error) {
 		opt(c)
 	}
 
-	client, err := dial(c.addr, c.dialOptions...)
+	var dialOptions []grpc.DialOption
+	if c.insecure {
+		dialOptions = append(dialOptions, grpc.WithInsecure())
+	} else {
+		dialOptions = append(dialOptions, grpc.WithTransportCredentials(credentials.NewTLS(c.tlsConfig)))
+	}
+
+	client, err := dial(c.addr, dialOptions...)
 	if err != nil {
 		return nil, err
 	}
@@ -39,18 +48,20 @@ func WithAddress(addr string) Option {
 
 func WithInsecure() Option {
 	return func(c *config) {
-		c.dialOptions = append(c.dialOptions, grpc.WithInsecure())
+		c.insecure = true
 	}
 }
 
 type config struct {
-	addr        string
-	dialOptions []grpc.DialOption
+	addr      string
+	insecure  bool
+	tlsConfig *tls.Config
 }
 
 func defaultConfig() *config {
 	return &config{
-		addr: DefaultAddr,
+		addr:      DefaultAddr,
+		tlsConfig: &tls.Config{},
 	}
 }
 
