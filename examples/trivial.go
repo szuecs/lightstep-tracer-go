@@ -45,11 +45,10 @@ func main() {
 
 	// Use LightStep as the global OpenTracing Tracer.
 
-	grpcOption, err := lightstepgrpc.WithGRPC(lightstepgrpc.WithAddress("collector-staging.lightstep.com:443"))
+	tracer, err := lightstep.NewTracer(*accessToken, lightstepgrpc.WithGRPC(lightstepgrpc.WithAddress("collector-staging.lightstep.com:443")))
 	if err != nil {
 		panic(err)
 	}
-	tracer := lightstep.NewTracer(*accessToken, grpcOption)
 	defer tracer.Close(context.Background())
 
 	opentracing.SetGlobalTracer(tracer)
