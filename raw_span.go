@@ -43,6 +43,20 @@ type SpanContext struct {
 
 	// The span's associated baggage.
 	Baggage map[string]string // initialized on first use
+
+	// Data propagated across vendors.
+	TraceState []OpaqueTraceState
+
+	// Used to store the leading 16 bytes of a 32-byte trace ID
+	// so that the full ID may be propagated across vendors,
+	// i.e., if there is a 32-byte trace ID in the `traceparent` header
+	LeadingTraceID uint64
+}
+
+// OpaqueTraceState contains data from other vendors, propagated via the `tracestate` header
+type OpaqueTraceState struct {
+	Vendor string
+	Value  string
 }
 
 // ForeachBaggageItem belongs to the opentracing.SpanContext interface
@@ -68,5 +82,5 @@ func (c SpanContext) WithBaggageItem(key, val string) SpanContext {
 		newBaggage[key] = val
 	}
 	// Use positional parameters so the compiler will help catch new fields.
-	return SpanContext{c.TraceID, c.SpanID, newBaggage}
+	return SpanContext{c.TraceID, c.SpanID, newBaggage, c.TraceState, c.LeadingTraceID}
 }

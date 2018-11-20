@@ -2,8 +2,11 @@ package lightstep_test
 
 import (
 	"bytes"
+	"encoding/base64"
 	"encoding/json"
+	"fmt"
 	"io"
+	"regexp"
 	"strings"
 	"time"
 
@@ -15,6 +18,10 @@ import (
 	. "github.com/onsi/gomega"
 	ot "github.com/opentracing/opentracing-go"
 	"github.com/opentracing/opentracing-go/log"
+)
+
+const (
+	traceParentVersion = "00"
 )
 
 // Interfaces
@@ -206,6 +213,269 @@ var _ = Describe("Tracer Transports", func() {
 							Expect(fakeClient.GetSpan(0).GetReference(0).GetSpanContext().SpanID).To(Equal(expectedParentSpanID))
 						}
 					})
+				})
+			})
+
+			Describe("Header Carriers", func() {
+				const (
+					knownTraceParent = "00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01" // from the spec: https://w3c.github.io/trace-context/#relationship-between-the-headers
+				)
+
+				var (
+					traceParentRegexp *regexp.Regexp
+					traceStateRegexp  *regexp.Regexp
+
+					spanContext SpanContext
+
+					carrier ot.TextMapCarrier
+				)
+
+				JustBeforeEach(func() {
+					var err error
+					traceParentRegexp, err = regexp.Compile(`^([[:xdigit:]]{2})-([[:xdigit:]]{32})-([[:xdigit:]]{16})-([[:xdigit:]]{2})$`)
+					Expect(err).To(Succeed())
+					traceStateRegexp, err = regexp.Compile(`^\s*(\w+)=(\w*)\s*$`)
+					Expect(err).To(Succeed())
+
+					span := tracer.StartSpan("test")
+					sc := span.Context()
+
+					var ok bool
+					spanContext, ok = sc.(SpanContext)
+					Expect(ok).To(BeTrue())
+
+					carrier = make(ot.TextMapCarrier)
+				})
+
+				Describe("#Inject", func() {
+					It("sets the `traceparent` header", func() {
+						err := tracer.Inject(spanContext, ot.HTTPHeaders, carrier)
+						Expect(err).To(Succeed())
+
+						traceParent := carrier["traceparent"]
+						Expect(traceParent).NotTo(BeEmpty())
+						Expect(traceParentRegexp.MatchString(traceParent)).To(BeTrue())
+
+						matches := traceParentRegexp.FindAllStringSubmatch(traceParent, -1)
+
+						Expect(matches).To(HaveLen(1))
+						Expect(matches[0]).To(HaveLen(5))
+
+						Expect(matches[0][1]).To(Equal(traceParentVersion))
+
+						traceID, err := strconv.ParseUint(matches[0][2], 16, 64)
+						Expect(err).To(Succeed())
+						Expect(traceID).To(Equal(spanContext.TraceID))
+
+						spanID, err := strconv.ParseUint(matches[0][3], 16, 64)
+						Expect(err).To(Succeed())
+						Expect(spanID).To(Equal(spanContext.SpanID))
+
+						Expect(matches[0][4]).To(Equal("01"))
+					})
+
+					It("sets the `tracestate` header", func() {
+						err := tracer.Inject(spanContext, ot.HTTPHeaders, carrier)
+						Expect(err).To(Succeed())
+
+						traceState := carrier["tracestate"]
+						Expect(traceState).NotTo(BeEmpty())
+
+						vendorStates := strings.Split(traceState, ",")
+						Expect(vendorStates).To(HaveLen(1))
+
+						state := vendorStates[0]
+						Expect(state).NotTo(BeEmpty())
+						Expect(traceStateRegexp.MatchString(state)).To(BeTrue())
+
+						matches := traceStateRegexp.FindAllStringSubmatch(state, -1)
+
+						Expect(matches).To(HaveLen(1))
+						Expect(matches[0]).To(HaveLen(3))
+
+						Expect(matches[0][1]).To(Equal("lightstep"))
+						Expect(matches[0][2]).To(Equal(""))
+					})
+
+					It("encodes baggage into the `tracestate` header", func() {
+						span := tracer.StartSpan("test")
+						span.SetBaggageItem("a", "b")
+						span.SetBaggageItem("foo", "bar")
+
+						spanContext := span.Context()
+
+						err := tracer.Inject(spanContext, ot.HTTPHeaders, carrier)
+						Expect(err).To(Succeed())
+
+						traceState := carrier["tracestate"]
+						Expect(traceState).NotTo(BeEmpty())
+
+						vendorStates := strings.Split(traceState, ",")
+						Expect(vendorStates).To(HaveLen(1))
+
+						state := vendorStates[0]
+						Expect(state).NotTo(BeEmpty())
+						Expect(traceStateRegexp.MatchString(state)).To(BeTrue())
+
+						matches := traceStateRegexp.FindAllStringSubmatch(state, -1)
+
+						Expect(matches).To(HaveLen(1))
+						Expect(matches[0]).To(HaveLen(3))
+
+						Expect(matches[0][1]).To(Equal("lightstep"))
+
+						encodedBaggage := matches[0][2]
+						decodedBaggage, err := base64.RawURLEncoding.DecodeString(encodedBaggage)
+						Expect(err).To(Succeed())
+
+						baggage := strings.Split(string(decodedBaggage), ",")
+						Expect(baggage).To(HaveLen(2))
+						Expect(baggage).To(ContainElement("a=b"))
+						Expect(baggage).To(ContainElement("foo=bar"))
+					})
+
+					XIt("retains `tracestate` values from other vendors", func() {
+						carrier.Set("tracestate", "other=foo,another=bar")
+
+						err := tracer.Inject(spanContext, ot.HTTPHeaders, carrier)
+						Expect(err).To(Succeed())
+
+						traceState := carrier["tracestate"]
+						Expect(traceState).To(Equal("lightstep=,other=foo,another=bar"))
+					})
+
+					XIt("replaces prior LightStep `tracestate` values", func() {
+						encodedBaggage := base64.RawURLEncoding.EncodeToString([]byte("a=b"))
+
+						carrier["tracestate"] = fmt.Sprintf("other=foo,lightstep=%s", encodedBaggage)
+
+						err := tracer.Inject(spanContext, ot.HTTPHeaders, carrier)
+						Expect(err).To(Succeed())
+
+						traceState := carrier["tracestate"]
+						Expect(traceState).To(Equal("lightstep=,other=foo"))
+					})
+
+					XIt("truncates the `tracestate` header at 512 characters", func() {
+						var longValue []byte
+						for i := 0; i < 512; i++ {
+							longValue = append(longValue, 'x')
+						}
+						carrier["tracestate"] = fmt.Sprintf("short=abc,alsoshort=123,long=%s", string(longValue))
+
+						err := tracer.Inject(spanContext, ot.HTTPHeaders, carrier)
+						Expect(err).To(Succeed())
+
+						traceState := carrier["tracestate"]
+						Expect(traceState).To(Equal("lightstep=,short=abc,alsoshort=123"))
+					})
+
+					It("truncates the `tracestate` header at 512 characters", func() {
+						var longValue []byte
+						for i := 0; i < 512; i++ {
+							longValue = append(longValue, 'x')
+						}
+						priorState := []OpaqueTraceState{
+							OpaqueTraceState{Vendor: "short", Value: "abc"},
+							OpaqueTraceState{Vendor: "alsoshort", Value: "123"},
+							OpaqueTraceState{Vendor: "Long", Value: string(longValue)},
+						}
+						spanContext.TraceState = append(spanContext.TraceState, priorState...)
+
+						err := tracer.Inject(spanContext, ot.HTTPHeaders, carrier)
+						Expect(err).To(Succeed())
+
+						traceState := carrier["tracestate"]
+						Expect(traceState).To(Equal("lightstep=,short=abc,alsoshort=123"))
+					})
+				})
+
+				Describe("#Extract", func() {
+					It("extracts the trace ID and span ID from the `traceparent` header", func() {
+						carrier.Set("traceparent", knownTraceParent)
+
+						sc, err := tracer.Extract(ot.HTTPHeaders, &carrier)
+						Expect(err).To(Succeed())
+
+						ctx, ok := sc.(SpanContext)
+						Expect(ok).To(BeTrue())
+
+						Expect(ctx.TraceID).To(Equal(uint64(9532127138774266268)))
+						Expect(ctx.SpanID).To(Equal(uint64(13235353014750950193)))
+					})
+
+					It("extracts baggage from the `tracestate` header", func() {
+						encodedBaggage := base64.RawURLEncoding.EncodeToString([]byte("foo=bar"))
+						traceState := fmt.Sprintf("a=b,lightstep=%s,other=vendor", encodedBaggage)
+						carrier.Set("tracestate", traceState)
+						carrier.Set("traceparent", knownTraceParent) // to prevent validation errors
+
+						sc, err := tracer.Extract(ot.HTTPHeaders, &carrier)
+						Expect(err).To(Succeed())
+
+						ctx, ok := sc.(SpanContext)
+						Expect(ok).To(BeTrue())
+
+						Expect(ctx.Baggage["foo"]).To(Equal("bar"))
+					})
+				})
+
+				It("is able to propagate the full trace ID from `traceparent`", func() {
+					carrier.Set("traceparent", knownTraceParent)
+
+					sc, err := tracer.Extract(ot.HTTPHeaders, carrier)
+					Expect(err).To(Succeed())
+
+					span := tracer.StartSpan("test", ot.ChildOf(sc))
+
+					c := make(ot.TextMapCarrier)
+					err = tracer.Inject(span.Context(), ot.HTTPHeaders, c)
+					Expect(err).To(Succeed())
+
+					traceParent := c["traceparent"]
+					Expect(traceParent).NotTo(BeEmpty())
+					Expect(traceParentRegexp.MatchString(traceParent)).To(BeTrue())
+
+					matches := traceParentRegexp.FindAllStringSubmatch(traceParent, -1)
+
+					Expect(matches).To(HaveLen(1))
+					Expect(matches[0]).To(HaveLen(5))
+
+					traceID := matches[0][2]
+					Expect(traceID).To(Equal("0af7651916cd43dd8448eb211c80319c"))
+				})
+
+				It("is able to propagate `tracestate` values from other vendors", func() {
+					carrier.Set("traceparent", knownTraceParent)
+					carrier.Set("tracestate", "other=vendor,a=b")
+
+					sc, err := tracer.Extract(ot.HTTPHeaders, carrier)
+					Expect(err).To(Succeed())
+
+					span := tracer.StartSpan("test", ot.ChildOf(sc))
+
+					c := make(ot.TextMapCarrier)
+					err = tracer.Inject(span.Context(), ot.HTTPHeaders, c)
+					Expect(err).To(Succeed())
+
+					Expect(c["tracestate"]).To(Equal("lightstep=,other=vendor,a=b"))
+				})
+
+				It("does not double-propagate prior LightStep `tracestate` values", func() {
+					encodedBaggage := base64.RawURLEncoding.EncodeToString([]byte("key=value"))
+					carrier.Set("traceparent", knownTraceParent)
+					carrier.Set("tracestate", fmt.Sprintf("other=vendor,a=b,lightstep=%s", encodedBaggage))
+
+					sc, err := tracer.Extract(ot.HTTPHeaders, carrier)
+					Expect(err).To(Succeed())
+
+					span := tracer.StartSpan("test", ot.ChildOf(sc))
+
+					c := make(ot.TextMapCarrier)
+					err = tracer.Inject(span.Context(), ot.HTTPHeaders, c)
+					Expect(err).To(Succeed())
+
+					Expect(c["tracestate"]).To(Equal(fmt.Sprintf("lightstep=%s,other=vendor,a=b", encodedBaggage)))
 				})
 			})
 

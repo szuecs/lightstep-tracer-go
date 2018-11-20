@@ -52,6 +52,8 @@ ReferencesLoop:
 				break ReferencesLoop
 			}
 			sp.raw.Context.TraceID = refCtx.TraceID
+			sp.raw.Context.LeadingTraceID = refCtx.LeadingTraceID
+			sp.raw.Context.TraceState = refCtx.TraceState
 			sp.raw.ParentSpanID = refCtx.SpanID
 
 			if l := len(refCtx.Baggage); l > 0 {
