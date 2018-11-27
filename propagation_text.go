@@ -71,23 +71,25 @@ func (textMapPropagator) Inject(
 		}
 	}
 
-	encodedBaggage := base64.RawURLEncoding.EncodeToString(baggage)
-	traceState := fmt.Sprintf("%s=%s", vendorKey, encodedBaggage)
+	var traceState strings.Builder
 
-	traceStateLen := len(traceState)
+	encodedBaggage := base64.RawURLEncoding.EncodeToString(baggage)
+	if _, err := traceState.WriteString(fmt.Sprintf("%s=%s", vendorKey, encodedBaggage)); err != nil {
+		return opentracing.ErrSpanContextCorrupted
+	}
 
 	for _, ts := range sc.TraceState {
 		encodedTS := fmt.Sprintf(",%s=%s", ts.Vendor, ts.Value)
-		traceStateLen += len(encodedTS)
-
-		if traceStateLen > maxTraceStateLen {
+		if traceState.Len()+len(encodedTS) > maxTraceStateLen {
 			break
 		}
 
-		traceState += encodedTS
+		if _, err := traceState.WriteString(encodedTS); err != nil {
+			return opentracing.ErrSpanContextCorrupted
+		}
 	}
 
-	carrier.Set(traceStateKey, traceState)
+	carrier.Set(traceStateKey, traceState.String())
 
 	return nil
 }
