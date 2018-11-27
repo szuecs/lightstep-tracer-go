@@ -2,6 +2,7 @@ package lightstep
 
 import (
 	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"regexp"
 	"strconv"
@@ -61,12 +62,16 @@ func (textMapPropagator) Inject(
 	carrier.Set(fieldNameSampled, "true")
 	carrier.Set(traceParentKey, fmt.Sprintf("00-%016s%016s-%016s-01", leadingTraceID, traceID, spanID))
 
-	var baggage []string
-	for k, v := range sc.Baggage {
-		carrier.Set(prefixBaggage+k, v)
-		baggage = append(baggage, fmt.Sprintf("%s=%s", k, v))
+	var baggage []byte
+	if len(sc.Baggage) > 0 {
+		var err error
+		baggage, err = json.Marshal(sc.Baggage)
+		if err != nil {
+			return opentracing.ErrSpanContextCorrupted
+		}
 	}
-	encodedBaggage := base64.RawURLEncoding.EncodeToString([]byte(strings.Join(baggage, ",")))
+
+	encodedBaggage := base64.RawURLEncoding.EncodeToString(baggage)
 	traceState := fmt.Sprintf("%s=%s", vendorKey, encodedBaggage)
 
 	traceStateLen := len(traceState)
@@ -154,12 +159,13 @@ func (textMapPropagator) Extract(
 								return opentracing.ErrSpanContextCorrupted
 							}
 
-							baggage := strings.Split(string(dBaggage), ",")
-							for _, item := range baggage {
-								splitBaggage := strings.SplitN(item, "=", 2)
-								if len(splitBaggage) == 2 {
-									decodedBaggage[splitBaggage[0]] = splitBaggage[1]
-								}
+							baggage := make(map[string]string)
+							if err = json.Unmarshal(dBaggage, &baggage); err != nil {
+								return opentracing.ErrSpanContextCorrupted
+							}
+
+							for k, v := range baggage {
+								decodedBaggage[k] = v
 							}
 						} else {
 							opaqueTraceState = append(opaqueTraceState, OpaqueTraceState{

@@ -328,10 +328,13 @@ var _ = Describe("Tracer Transports", func() {
 						decodedBaggage, err := base64.RawURLEncoding.DecodeString(encodedBaggage)
 						Expect(err).To(Succeed())
 
-						baggage := strings.Split(string(decodedBaggage), ",")
+						baggage := make(map[string]string)
+						err = json.Unmarshal(decodedBaggage, &baggage)
+						Expect(err).To(Succeed())
+
 						Expect(baggage).To(HaveLen(2))
-						Expect(baggage).To(ContainElement("a=b"))
-						Expect(baggage).To(ContainElement("foo=bar"))
+						Expect(baggage).To(HaveKeyWithValue("a", "b"))
+						Expect(baggage).To(HaveKeyWithValue("foo", "bar"))
 					})
 
 					XIt("retains `tracestate` values from other vendors", func() {
@@ -405,7 +408,7 @@ var _ = Describe("Tracer Transports", func() {
 					})
 
 					It("extracts baggage from the `tracestate` header", func() {
-						encodedBaggage := base64.RawURLEncoding.EncodeToString([]byte("foo=bar"))
+						encodedBaggage := base64.RawURLEncoding.EncodeToString([]byte(`{"foo":"bar"}`))
 						traceState := fmt.Sprintf("a=b,lightstep=%s,other=vendor", encodedBaggage)
 						carrier.Set("tracestate", traceState)
 						carrier.Set("traceparent", knownTraceParent) // to prevent validation errors
@@ -416,6 +419,7 @@ var _ = Describe("Tracer Transports", func() {
 						ctx, ok := sc.(SpanContext)
 						Expect(ok).To(BeTrue())
 
+						Expect(ctx.Baggage).To(HaveLen(1))
 						Expect(ctx.Baggage["foo"]).To(Equal("bar"))
 					})
 				})
@@ -462,7 +466,7 @@ var _ = Describe("Tracer Transports", func() {
 				})
 
 				It("does not double-propagate prior LightStep `tracestate` values", func() {
-					encodedBaggage := base64.RawURLEncoding.EncodeToString([]byte("key=value"))
+					encodedBaggage := base64.RawURLEncoding.EncodeToString([]byte(`{"key":"value"}`))
 					carrier.Set("traceparent", knownTraceParent)
 					carrier.Set("tracestate", fmt.Sprintf("other=vendor,a=b,lightstep=%s", encodedBaggage))
 
