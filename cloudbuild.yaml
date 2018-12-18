@@ -1,0 +1,13 @@
+steps:
+  - name: 'gcr.io/cloud-builders/go:debian'
+    args: ['get', 'github.com/lightstep/conformance/runner']
+    env: ['PROJECT_ROOT=github.com/lightstep/lightstep-tracer-go']
+  - name: 'gcr.io/cloud-builders/go:debian'
+    args: ['install', 'github.com/lightstep/conformance/runner']
+    env: ['PROJECT_ROOT=github.com/lightstep/lightstep-tracer-go']
+  - name: 'gcr.io/cloud-builders/go:debian'
+    args: ['install', 'github.com/lightstep/lightstep-tracer-go/cmd/conformance_client']
+    env: ['PROJECT_ROOT=github.com/lightstep/lightstep-tracer-go']
+  - name: 'debian'
+    entrypoint: '/workspace/gopath/bin/runner'
+    args: ['/workspace/gopath/bin/conformance_client']

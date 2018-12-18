@@ -85,3 +85,8 @@ version.go: VERSION
 release_tag:
 	git tag -a v`cat ./VERSION`
 	git push origin v`cat ./VERSION`
+
+conformance: cloudbuild.yaml
+	dep ensure
+	gcloud builds submit --config=cloudbuild.yaml .
+
