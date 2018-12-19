@@ -87,6 +87,4 @@ release_tag:
 	git push origin v`cat ./VERSION`
 
 conformance: cloudbuild.yaml
-	dep ensure
 	gcloud builds submit --config=cloudbuild.yaml .
-
