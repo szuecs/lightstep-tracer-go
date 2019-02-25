@@ -1,6 +1,7 @@
 # Changelog
 
 ## [Pending Release](https://github.com/lightstep/lightstep-tracer-go/compare/v0.15.6...HEAD)
+* Migrate from dep to go modules
 * Thrift transport is now removed.
 * Requires go >= 1.7
 * Imports `context` via the standard library instead of `golang.org/x/net/context`
@@ -42,7 +43,7 @@
 * Remove gogo in favor of golang/protobuf.
 * Requires grpc-go >= 1.4.0.
 
-## [v0.13.0](https://github.com/lightstep/lightstep-tracer-go/compare/v0.12.0...v0.13.0) 
+## [v0.13.0](https://github.com/lightstep/lightstep-tracer-go/compare/v0.12.0...v0.13.0)
 * BasicTracer has been removed.
 * Tracer now takes a SpanRecorder as an option.
 * Tracer interface now includes Close and Flush.
