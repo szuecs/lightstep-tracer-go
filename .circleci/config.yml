@@ -14,7 +14,6 @@ jobs:
       - checkout
       - run: git submodule sync
       - run: git submodule update --init
-      - run: dep ensure -v
       - run: go test
 
 workflows:
