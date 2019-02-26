@@ -8,6 +8,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/lightstep/lightstep-tracer-go/internal/randx"
 	"github.com/opentracing/opentracing-go"
 )
 
@@ -100,7 +101,7 @@ func NewTracer(opts Options) Tracer {
 	now := time.Now()
 	impl := &tracerImpl{
 		opts:                    opts,
-		reporterID:              genSeededGUID(),
+		reporterID:              randx.GenSeededGUID(),
 		buffer:                  newSpansBuffer(opts.MaxBufferedSpans),
 		flushing:                newSpansBuffer(opts.MaxBufferedSpans),
 		closeReportLoopChannel:  make(chan struct{}),

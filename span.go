@@ -4,6 +4,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/lightstep/lightstep-tracer-go/internal/randx"
 	"github.com/opentracing/opentracing-go"
 	"github.com/opentracing/opentracing-go/log"
 )
@@ -66,10 +67,10 @@ ReferencesLoop:
 
 	if sp.raw.Context.TraceID == 0 {
 		// TraceID not set by parent reference or explicitly
-		sp.raw.Context.TraceID, sp.raw.Context.SpanID = genSeededGUID2()
+		sp.raw.Context.TraceID, sp.raw.Context.SpanID = randx.GenSeededGUID2()
 	} else if sp.raw.Context.SpanID == 0 {
 		// TraceID set but SpanID not set
-		sp.raw.Context.SpanID = genSeededGUID()
+		sp.raw.Context.SpanID = randx.GenSeededGUID()
 	}
 
 	sp.tracer = tracer

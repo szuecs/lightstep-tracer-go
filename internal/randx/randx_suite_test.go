@@ -1,4 +1,4 @@
-package lightstep
+package randx_test
 
 import (
 	gorand "math/rand"
@@ -6,20 +6,25 @@ import (
 	"testing"
 	"time"
 
+	. "github.com/lightstep/lightstep-tracer-go/internal/randx"
+	"github.com/lightstep/lightstep-tracer-go/lightstep/rand"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
-
-	"github.com/lightstep/lightstep-tracer-go/lightstep/rand"
 )
+
+func TestRandx(t *testing.T) {
+	RegisterFailHandler(Fail)
+	RunSpecs(t, "Randx Suite")
+}
 
 var _ = Describe("GenSeededGUID", func() {
 	Context("With a many calls on genSeededGUID", func() {
 		It("should not generate any duplicates", func() {
-			randompool = rand.NewPool(time.Now().UnixNano(), 10)
+			randomPool := rand.NewPool(time.Now().UnixNano(), 10)
 			uniques := 1000000
 			ids := map[uint64]bool{}
 			for i := 0; i < uniques; i++ {
-				id := genSeededGUID()
+				id := GenSeededGUID(WithRandomPool(randomPool))
 				ids[id] = true
 			}
 			Expect(len(ids)).To(Equal(uniques), "should have no duplicates")
@@ -28,11 +33,11 @@ var _ = Describe("GenSeededGUID", func() {
 
 	Context("With a many calls on genSeededGUID2", func() {
 		It("should not generate any duplicates", func() {
-			randompool = rand.NewPool(time.Now().UnixNano(), 10)
+			randomPool := rand.NewPool(time.Now().UnixNano(), 10)
 			uniques := 1000000
 			ids := map[uint64]bool{}
 			for i := 0; i < uniques; i++ {
-				id1, id2 := genSeededGUID2()
+				id1, id2 := GenSeededGUID2(WithRandomPool(randomPool))
 				ids[id1] = true
 				ids[id2] = true
 			}
@@ -67,14 +72,14 @@ var _ = Measure("Single Source GenSeededGUID should handle concurrency badly", f
 var _ = Measure("Random Pool GenSeededGUID should handle concurrency efficiently", func(b Benchmarker) {
 	goroutines := 100
 	calls := 50000
-	randompool = rand.NewPool(time.Now().UnixNano(), 16)
+	randomPool := rand.NewPool(time.Now().UnixNano(), 16)
 	b.Time("runtime", func() {
 		barrier := make(chan struct{})
 		group := &sync.WaitGroup{}
 		f := func(repeat int) {
 			<-barrier // block all goroutines
 			for i := 0; i < repeat; i++ {
-				_ = genSeededGUID()
+				_ = GenSeededGUID(WithRandomPool(randomPool))
 			}
 			group.Done()
 		}
@@ -120,10 +125,10 @@ func BenchmarkSingleSourceGenSeededGUID(b *testing.B) {
 func BenchmarkGenSeededRandomID(b *testing.B) {
 	// run with 100000 goroutines
 	b.SetParallelism(100000)
-	randompool = rand.NewPool(time.Now().UnixNano(), 16) // 16 random generators
+	randomPool := rand.NewPool(time.Now().UnixNano(), 16) // 16 random generators
 	b.RunParallel(func(pb *testing.PB) {
 		for pb.Next() {
-			genSeededGUID()
+			GenSeededGUID(WithRandomPool(randomPool))
 		}
 	})
 }
