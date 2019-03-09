@@ -9,6 +9,7 @@ build:
 
 test:
 	${GO} test -v github.com/lightstep/lightstep-tracer-go/...
+	${GO} test -race -v github.com/lightstep/lightstep-tracer-go/...
 
 # When releasing significant changes, make sure to update the semantic
 # version number in `./VERSION`, merge changes, then run `make release_tag`.
