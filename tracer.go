@@ -270,20 +270,21 @@ func (tracer *tracerImpl) Flush(ctx context.Context) {
 	}
 	emitEvent(tracer.postFlush(reportErrorEvent))
 
-	if err == nil {
-		tracer.metaEventReportingEnabled = !tracer.opts.MetaEventReportingDisabled && resp.DevMode()
+	if err != nil {
+		return
+	}
+	tracer.metaEventReportingEnabled = !tracer.opts.MetaEventReportingDisabled && resp.DevMode()
 
-		if tracer.metaEventReportingEnabled && !tracer.firstReportHasRun {
-			opentracing.StartSpan(LSMetaEvent_TracerCreateOperation,
-				opentracing.Tag{Key: LSMetaEvent_MetaEventKey, Value: true},
-				opentracing.Tag{Key: LSMetaEvent_TracerGuidKey, Value: tracer.reporterID}).
-				Finish()
-			tracer.firstReportHasRun = true
-		}
+	if tracer.metaEventReportingEnabled && !tracer.firstReportHasRun {
+		opentracing.StartSpan(LSMetaEvent_TracerCreateOperation,
+			opentracing.Tag{Key: LSMetaEvent_MetaEventKey, Value: true},
+			opentracing.Tag{Key: LSMetaEvent_TracerGuidKey, Value: tracer.reporterID}).
+			Finish()
+		tracer.firstReportHasRun = true
+	}
 
-		if resp.Disable() {
-			tracer.Disable()
-		}
+	if resp.Disable() {
+		tracer.Disable()
 	}
 }
 
