@@ -261,8 +261,6 @@ func (tracer *tracerImpl) Flush(ctx context.Context) {
 	resp, err := tracer.client.Report(ctx, req)
 	if err != nil {
 		reportErrorEvent = newEventFlushError(err, FlushErrorTransport)
-	} else if len(resp.GetErrors()) > 0 {
-		reportErrorEvent = newEventFlushError(fmt.Errorf(resp.GetErrors()[0]), FlushErrorReport)
 	}
 
 	if reportErrorEvent != nil {

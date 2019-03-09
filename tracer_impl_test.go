@@ -5,8 +5,8 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/lightstep/lightstep-tracer-go/collectorpb"
-	"github.com/lightstep/lightstep-tracer-go/collectorpb/collectorpbfakes"
+	"github.com/lightstep/lightstep-tracer-common/golang/protobuf/collectorpb"
+	"github.com/lightstep/lightstep-tracer-common/golang/protobuf/collectorpb/collectorpbfakes"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 )
@@ -88,7 +88,7 @@ func fakeGrpcConnection(fakeClient *collectorpbfakes.FakeCollectorServiceClient)
 
 type fakeCollectorClient struct {
 	realClient      collectorClient
-	report          func(context.Context, reportRequest) (collectorResponse, error)
+	report          func(context.Context, reportRequest) (reportResponse, error)
 	translate       func(context.Context, *reportBuffer) (reportRequest, error)
 	connectClient   func() (Connection, error)
 	shouldReconnect func() bool
@@ -104,7 +104,7 @@ func newFakeCollectorClient(client collectorClient) *fakeCollectorClient {
 	}
 }
 
-func (f *fakeCollectorClient) Report(ctx context.Context, r reportRequest) (collectorResponse, error) {
+func (f *fakeCollectorClient) Report(ctx context.Context, r reportRequest) (reportResponse, error) {
 	return f.report(ctx, r)
 }
 func (f *fakeCollectorClient) Translate(ctx context.Context, r *reportBuffer) (reportRequest, error) {

@@ -1,3 +1,19 @@
+required = [
+    "github.com/lightstep/lightstep-tracer-common",
+    "github.com/lightstep/lightstep-tracer-common/golang/protobuf/lightsteppb",
+    "github.com/lightstep/lightstep-tracer-common/golang/protobuf/collectorpb",
+    "github.com/lightstep/lightstep-tracer-common/golang/protobuf/collectorpb/collectorpbfakes",
+]
+
+[[constraint]]
+  name = "github.com/lightstep/lightstep-tracer-common"
+  revision = "5c08c8156e1a492c2938fcf2cc6375921ad14abc"
+  # version = "1.0.2"
+
+[[constraint]]
+  name = "github.com/golang/protobuf"
+  version = "1.3.0"
+
 [[constraint]]
   name = "github.com/onsi/ginkgo"
   version = "1.4.0"

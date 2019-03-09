@@ -10,7 +10,7 @@ import (
 	"google.golang.org/grpc/credentials"
 
 	// N.B.(jmacd): Do not use google.golang.org/glog in this package.
-	collectorpb "github.com/lightstep/lightstep-tracer-go/collectorpb"
+	collectorpb "github.com/lightstep/lightstep-tracer-common/golang/protobuf/collectorpb"
 )
 
 const (
@@ -110,7 +110,7 @@ func (client *grpcCollectorClient) ShouldReconnect() bool {
 	return time.Since(client.connTimestamp) > client.reconnectPeriod
 }
 
-func (client *grpcCollectorClient) Report(ctx context.Context, req reportRequest) (collectorResponse, error) {
+func (client *grpcCollectorClient) Report(ctx context.Context, req reportRequest) (reportResponse, error) {
 	if req.protoRequest == nil {
 		return nil, fmt.Errorf("protoRequest cannot be null")
 	}
@@ -118,7 +118,7 @@ func (client *grpcCollectorClient) Report(ctx context.Context, req reportRequest
 	if err != nil {
 		return nil, err
 	}
-	return resp, nil
+	return reportProtoResponse{resp}, nil
 }
 
 func (client *grpcCollectorClient) Translate(ctx context.Context, buffer *reportBuffer) (reportRequest, error) {

@@ -2,8 +2,15 @@
 
 
 [[projects]]
-  branch = "master"
-  digest = "1:3b760d3b93f994df8eb1d9ebfad17d3e9e37edcb7f7efaa15b427c0d7a64f4e4"
+  digest = "1:dc62e76fd82a4bd369b92e8adc26d69d18c46d194f183179ac06c92fa4360472"
+  name = "github.com/Pallinder/go-randomdata"
+  packages = ["."]
+  pruneopts = ""
+  revision = "97a2356fcab20708fb8ae46cbbf69a5bc9feca63"
+  version = "v1.1.0"
+
+[[projects]]
+  digest = "1:d3d38150b6d77b2aad42a9e105170538b6563518993d43df78a1add6e31cce62"
   name = "github.com/golang/protobuf"
   packages = [
     "proto",
@@ -14,7 +21,20 @@
     "ptypes/timestamp",
   ]
   pruneopts = ""
-  revision = "1e59b77b52bf8e4b449a57e6f79f21226d571845"
+  revision = "c823c79ea1570fb5ff454033735a8e68575d1d0f"
+  version = "v1.3.0"
+
+[[projects]]
+  digest = "1:4c9d8299dc82fc0bd656a4a7ec9406139a69fac2d60cab9c2d37d0af57030dc0"
+  name = "github.com/lightstep/lightstep-tracer-common"
+  packages = [
+    ".",
+    "golang/protobuf/collectorpb",
+    "golang/protobuf/collectorpb/collectorpbfakes",
+    "golang/protobuf/lightsteppb",
+  ]
+  pruneopts = ""
+  revision = "5c08c8156e1a492c2938fcf2cc6375921ad14abc"
 
 [[projects]]
   digest = "1:32b27072cd55bd2fb7244de0425943d125da6a552ae2b6517cdd965a662baf18"
@@ -149,35 +169,44 @@
   revision = "7f0da29060c682909f650ad8ed4e515bd74fa12a"
 
 [[projects]]
-  digest = "1:6c00b4702c146631d30396090d40bfc0486f8b3af5c976d6f0daf2bc737cd7b2"
+  digest = "1:b6c17b0c657f047118ae59b358950b28515914512cf3de02388cc42e33a92520"
   name = "google.golang.org/grpc"
   packages = [
     ".",
     "balancer",
+    "balancer/base",
     "balancer/roundrobin",
+    "binarylog/grpc_binarylog_v1",
     "codes",
     "connectivity",
     "credentials",
+    "credentials/internal",
     "encoding",
-    "grpclb/grpc_lb_v1/messages",
+    "encoding/proto",
     "grpclog",
     "internal",
+    "internal/backoff",
+    "internal/binarylog",
+    "internal/channelz",
+    "internal/envconfig",
+    "internal/grpcrand",
+    "internal/grpcsync",
+    "internal/syscall",
+    "internal/transport",
     "keepalive",
     "metadata",
     "naming",
     "peer",
     "resolver",
     "resolver/dns",
-    "resolver/manual",
     "resolver/passthrough",
     "stats",
     "status",
     "tap",
-    "transport",
   ]
   pruneopts = ""
-  revision = "be077907e29fdb945d351e4284eb5361e7f8924e"
-  version = "v1.8.1"
+  revision = "2fdaae294f38ed9a121193c51ec99fecd3b13eb7"
+  version = "v1.19.0"
 
 [[projects]]
   branch = "v2"
@@ -191,15 +220,18 @@
   analyzer-name = "dep"
   analyzer-version = 1
   input-imports = [
+    "github.com/Pallinder/go-randomdata",
     "github.com/golang/protobuf/proto",
     "github.com/golang/protobuf/ptypes/timestamp",
+    "github.com/lightstep/lightstep-tracer-common",
+    "github.com/lightstep/lightstep-tracer-common/golang/protobuf/collectorpb",
+    "github.com/lightstep/lightstep-tracer-common/golang/protobuf/collectorpb/collectorpbfakes",
+    "github.com/lightstep/lightstep-tracer-common/golang/protobuf/lightsteppb",
     "github.com/onsi/ginkgo",
     "github.com/onsi/gomega",
     "github.com/onsi/gomega/types",
     "github.com/opentracing/opentracing-go",
     "github.com/opentracing/opentracing-go/log",
-    "golang.org/x/net/context",
-    "google.golang.org/genproto/googleapis/api/annotations",
     "google.golang.org/grpc",
     "google.golang.org/grpc/credentials",
   ]

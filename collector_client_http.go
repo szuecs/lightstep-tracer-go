@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"github.com/golang/protobuf/proto"
-	"github.com/lightstep/lightstep-tracer-go/collectorpb"
+	"github.com/lightstep/lightstep-tracer-common/golang/protobuf/collectorpb"
 )
 
 var (
@@ -110,7 +110,7 @@ func (client *httpCollectorClient) ShouldReconnect() bool {
 	return false
 }
 
-func (client *httpCollectorClient) Report(context context.Context, req reportRequest) (collectorResponse, error) {
+func (client *httpCollectorClient) Report(context context.Context, req reportRequest) (reportResponse, error) {
 	if req.httpRequest == nil {
 		return nil, fmt.Errorf("httpRequest cannot be null")
 	}
@@ -169,7 +169,7 @@ func (client *httpCollectorClient) toRequest(
 	return request, nil
 }
 
-func (client *httpCollectorClient) toResponse(response *http.Response) (collectorResponse, error) {
+func (client *httpCollectorClient) toResponse(response *http.Response) (reportResponse, error) {
 	if response.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("status code (%d) is not ok", response.StatusCode)
 	}
@@ -184,5 +184,5 @@ func (client *httpCollectorClient) toResponse(response *http.Response) (collecto
 		return nil, err
 	}
 
-	return protoResponse, nil
+	return reportProtoResponse{protoResponse}, nil
 }
