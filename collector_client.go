@@ -53,9 +53,19 @@ func newCollectorClient(opts Options, reporterID uint64, attributes map[string]s
 }
 
 func (c reportProtoResponse) Disable() bool {
+	for _, c := range c.Commands {
+		if c != nil && c.Disable {
+			return true
+		}
+	}
 	return false
 }
 
 func (c reportProtoResponse) DevMode() bool {
+	for _, c := range c.Commands {
+		if c != nil && c.DevMode {
+			return true
+		}
+	}
 	return false
 }
