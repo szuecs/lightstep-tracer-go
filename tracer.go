@@ -123,8 +123,7 @@ func NewTracer(opts Options) Tracer {
 	impl.connection = conn
 
 	// set meta reporting to defined option
-	impl.metaEventReportingEnabled = opts.MetaEventReportingEnabled
-	impl.firstReportHasRun = false
+	impl.metaEventReportingEnabled = !opts.MetaEventReportingDisabled
 
 	go impl.reportLoop()
 
@@ -143,7 +142,7 @@ func (tracer *tracerImpl) StartSpan(
 }
 
 func (tracer *tracerImpl) Inject(sc opentracing.SpanContext, format interface{}, carrier interface{}) error {
-	if tracer.opts.MetaEventReportingEnabled {
+	if tracer.metaEventReportingEnabled {
 		opentracing.StartSpan(LSMetaEvent_InjectOperation,
 			opentracing.Tag{Key: LSMetaEvent_MetaEventKey, Value: true},
 			opentracing.Tag{Key: LSMetaEvent_TraceIdKey, Value: sc.(SpanContext).TraceID},
@@ -161,7 +160,7 @@ func (tracer *tracerImpl) Inject(sc opentracing.SpanContext, format interface{},
 }
 
 func (tracer *tracerImpl) Extract(format interface{}, carrier interface{}) (opentracing.SpanContext, error) {
-	if tracer.opts.MetaEventReportingEnabled {
+	if tracer.metaEventReportingEnabled {
 		opentracing.StartSpan(LSMetaEvent_ExtractOperation,
 			opentracing.Tag{Key: LSMetaEvent_MetaEventKey, Value: true},
 			opentracing.Tag{Key: LSMetaEvent_PropagationFormatKey, Value: format}).
@@ -246,14 +245,6 @@ func (tracer *tracerImpl) Flush(ctx context.Context) {
 		return
 	}
 
-	if tracer.opts.MetaEventReportingEnabled && !tracer.firstReportHasRun {
-		opentracing.StartSpan(LSMetaEvent_TracerCreateOperation,
-			opentracing.Tag{Key: LSMetaEvent_MetaEventKey, Value: true},
-			opentracing.Tag{Key: LSMetaEvent_TracerGuidKey, Value: tracer.reporterID}).
-			Finish()
-		tracer.firstReportHasRun = true
-	}
-
 	ctx, cancel := context.WithTimeout(ctx, tracer.opts.ReportTimeout)
 	defer cancel()
 
@@ -270,8 +261,6 @@ func (tracer *tracerImpl) Flush(ctx context.Context) {
 	resp, err := tracer.client.Report(ctx, req)
 	if err != nil {
 		reportErrorEvent = newEventFlushError(err, FlushErrorTransport)
-	} else if len(resp.GetErrors()) > 0 {
-		reportErrorEvent = newEventFlushError(fmt.Errorf(resp.GetErrors()[0]), FlushErrorReport)
 	}
 
 	if reportErrorEvent != nil {
@@ -279,15 +268,20 @@ func (tracer *tracerImpl) Flush(ctx context.Context) {
 	}
 	emitEvent(tracer.postFlush(reportErrorEvent))
 
-	if err == nil && resp.DevMode() {
-		tracer.metaEventReportingEnabled = true
+	if err != nil {
+		return
+	}
+	tracer.metaEventReportingEnabled = !tracer.opts.MetaEventReportingDisabled && resp.DevMode()
+
+	if tracer.metaEventReportingEnabled && !tracer.firstReportHasRun {
+		opentracing.StartSpan(LSMetaEvent_TracerCreateOperation,
+			opentracing.Tag{Key: LSMetaEvent_MetaEventKey, Value: true},
+			opentracing.Tag{Key: LSMetaEvent_TracerGuidKey, Value: tracer.reporterID}).
+			Finish()
+		tracer.firstReportHasRun = true
 	}
 
-	if err == nil && !resp.DevMode() {
-		tracer.metaEventReportingEnabled = false
-	}
-
-	if err == nil && resp.Disable() {
+	if resp.Disable() {
 		tracer.Disable()
 	}
 }
