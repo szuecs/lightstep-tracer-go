@@ -17,6 +17,7 @@ import (
 var (
 	acceptHeader      = http.CanonicalHeaderKey("Accept")
 	contentTypeHeader = http.CanonicalHeaderKey("Content-Type")
+	accessTokenHeader = http.CanonicalHeaderKey("LightStep-Access-Token")
 )
 
 const (
@@ -165,6 +166,7 @@ func (client *httpCollectorClient) toRequest(
 	request = request.WithContext(context)
 	request.Header.Set(contentTypeHeader, protoContentType)
 	request.Header.Set(acceptHeader, protoContentType)
+	request.Header.Set(accessTokenHeader, client.accessToken)
 
 	return request, nil
 }
