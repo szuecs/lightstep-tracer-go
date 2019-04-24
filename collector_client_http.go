@@ -3,6 +3,8 @@ package lightstep
 import (
 	"bytes"
 	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"fmt"
 	"io/ioutil"
 	"net"
@@ -33,6 +35,7 @@ type httpCollectorClient struct {
 	accessToken string // accessToken is the access token used for explicit trace collection requests.
 	attributes  map[string]string
 
+	tlsClientConfig *tls.Config
 	reportTimeout   time.Duration
 	reportingPeriod time.Duration
 
@@ -65,15 +68,43 @@ func newHTTPCollectorClient(
 	}
 	url.Path = collectorHTTPPath
 
+	tlsClientConfig, err := getTLSConfig(opts.Collector.CustomCACertFile)
+	if err != nil {
+		fmt.Println("failed to get TLSConfig: ", err)
+		return nil, err
+	}
+
 	return &httpCollectorClient{
 		reporterID:      reporterID,
 		accessToken:     opts.AccessToken,
 		attributes:      attributes,
+		tlsClientConfig: tlsClientConfig,
 		reportTimeout:   opts.ReportTimeout,
 		reportingPeriod: opts.ReportingPeriod,
 		url:             url,
 		converter:       newProtoConverter(opts),
 	}, nil
+}
+
+// getTLSConfig returns a *tls.Config according to whether a user has supplied a customCACertFile. If they have,
+// we return a TLSConfig that uses the custom CA cert as the lone Root CA. If not, we return nil which http.Transport
+// will interpret as the default system defined Root CAs.
+func getTLSConfig(customCACertFile string) (*tls.Config, error) {
+	if len(customCACertFile) == 0 {
+		return nil, nil
+	}
+
+	caCerts := x509.NewCertPool()
+	cert, err := ioutil.ReadFile(customCACertFile)
+	if err != nil {
+		return nil, err
+	}
+
+	if !caCerts.AppendCertsFromPEM(cert) {
+		return nil, fmt.Errorf("credentials: failed to append certificate")
+	}
+
+	return &tls.Config{RootCAs: caCerts}, nil
 }
 
 func (client *httpCollectorClient) ConnectClient() (Connection, error) {
@@ -95,6 +126,7 @@ func (client *httpCollectorClient) ConnectClient() (Connection, error) {
 		ResponseHeaderTimeout:  client.reportTimeout,
 		ExpectContinueTimeout:  client.reportTimeout,
 		MaxResponseHeaderBytes: 64 * 1024, // 64 KB, just a safeguard
+		TLSClientConfig:        client.tlsClientConfig,
 	}
 
 	client.client = &http.Client{
