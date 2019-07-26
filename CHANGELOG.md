@@ -2,6 +2,10 @@
 
 ## [Pending Release](https://github.com/lightstep/lightstep-tracer-go/compare/v0.16.0...HEAD)
 
+## [v0.17.0](https://github.com/lightstep/lightstep-tracer-go/compare/v0.16.0...v0.17.0)
+* Migrate dependency management from dep to gomod
+* Lazy loggers can emit 0 -> N log entries instead of just one.
+* Refactor Collector Client to allow for user-defined transports.
 
 ## [v0.16.0](https://github.com/lightstep/lightstep-tracer-go/compare/v0.15.6...v0.16.0)
 * Thrift transport is eliminated
