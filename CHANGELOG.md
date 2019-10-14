@@ -2,6 +2,9 @@
 
 ## [Pending Release](https://github.com/lightstep/lightstep-tracer-go/compare/v0.16.0...HEAD)
 
+## [v0.17.1](https://github.com/lightstep/lightstep-tracer-go/compare/v0.17.0...v0.17.1)
+* Fixes [#219](https://github.com/lightstep/lightstep-tracer-go/issues/219) so that there is no longer a data race when reading and writing from spans
+
 ## [v0.17.0](https://github.com/lightstep/lightstep-tracer-go/compare/v0.16.0...v0.17.0)
 * Migrate dependency management from dep to gomod
 * Lazy loggers can emit 0 -> N log entries instead of just one.
