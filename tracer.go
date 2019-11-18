@@ -93,7 +93,7 @@ type tracerImpl struct {
 // In case of error, we emit event and return nil.
 func NewTracer(opts Options) Tracer {
 	tr, err := CreateTracer(opts)
-	if err != nil  {
+	if err != nil {
 		emitEvent(newEventStartError(err))
 		return nil
 	}
@@ -150,14 +150,12 @@ func CreateTracer(opts Options) (Tracer, error) {
 	go impl.reportLoop()
 
 	impl.propagators = map[opentracing.BuiltinFormat]Propagator{
-		opentracing.TextMap:     theLightStepPropagator,
-		opentracing.HTTPHeaders: theLightStepPropagator,
-		opentracing.Binary:      theBinaryPropagator,
+		opentracing.TextMap:     LightStepPropagator,
+		opentracing.HTTPHeaders: LightStepPropagator,
+		opentracing.Binary:      BinaryPropagator,
 	}
-
-	if opts.Propagator == "b3" {
-		impl.propagators[opentracing.TextMap] = theB3Propagator
-		impl.propagators[opentracing.HTTPHeaders] = theB3Propagator
+	for builtin, propagator := range opts.Propagators {
+		impl.propagators[builtin] = propagator
 	}
 
 	return impl, nil
