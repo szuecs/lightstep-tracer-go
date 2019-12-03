@@ -14,6 +14,9 @@ const (
 // Option provides configuration for the Exporter
 type Option func(*config)
 
+// Attributes provide extra information in a span
+type Attributes map[string]interface{}
+
 // WithAccessToken sets an access token for communicating with LightStep
 func WithAccessToken(accessToken string) Option {
 	return func(c *config) {
@@ -56,6 +59,15 @@ func WithComponentName(componentName string) Option {
 	return func(c *config) {
 		if componentName != "" {
 			c.tracerOptions.Tags[lightstep.ComponentNameKey] = componentName
+		}
+	}
+}
+
+// WithDefaultAttributes sets attributes that will be appended to every span that is exported to the trace.
+func WithDefaultAttributes(attrs Attributes) Option {
+	return func(c *config) {
+		for key, value := range attrs {
+			c.tracerOptions.Tags[key] = value
 		}
 	}
 }
