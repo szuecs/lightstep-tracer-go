@@ -9,8 +9,9 @@ require (
 	github.com/onsi/ginkgo v1.7.0
 	github.com/onsi/gomega v1.4.3
 	github.com/opentracing/opentracing-go v1.0.2
+	github.com/shirou/gopsutil v2.20.1+incompatible
 	go.opencensus.io v0.20.2
 	google.golang.org/grpc v1.21.0
 )
 
-replace github.com/lightstep/lightstep-tracer-common/golang/gogo => github.com/iredelmeier/lightstep-tracer-common/golang/gogo v0.0.0-20200214014507-d2a48926e0a9
+replace github.com/lightstep/lightstep-tracer-common/golang/gogo => /Users/isobel/go/src/github.com/lightstep/lightstep-tracer-common/golang/gogo

@@ -8,6 +8,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/lightstep/lightstep-tracer-go/internal/metrics"
 	"github.com/opentracing/opentracing-go"
 )
 
@@ -42,13 +43,17 @@ type tracerImpl struct {
 	opts       Options
 
 	// report loop management
-	closeOnce               sync.Once
-	closeReportLoopChannel  chan struct{}
-	reportLoopClosedChannel chan struct{}
+	closeOnce                     sync.Once
+	closeReportLoopChannel        chan struct{}
+	closeSystemMetricsLoopChannel chan struct{}
+	reportLoopClosedChannel       chan struct{}
 
 	converter   *protoConverter
 	accessToken string
 	attributes  map[string]string
+
+	metricsReporter             *metrics.Reporter
+	metricsMeasurementFrequency time.Duration
 
 	//////////////////////////////////////////////////////////
 	// MUTABLE MUTABLE MUTABLE MUTABLE MUTABLE MUTABLE MUTABLE
@@ -127,6 +132,12 @@ func CreateTracer(opts Options) (Tracer, error) {
 		converter:               newProtoConverter(opts),
 		accessToken:             opts.AccessToken,
 		attributes:              attributes,
+		metricsReporter: metrics.NewReporter(
+			metrics.WithReporterAccessToken(opts.AccessToken),
+			metrics.WithReporterTimeout(opts.SystemMetrics.Timeout),
+			metrics.WithReporterAddress(opts.SystemMetrics.Endpoint.urlWithoutPath()),
+		),
+		metricsMeasurementFrequency: opts.SystemMetrics.MeasurementFrequency,
 	}
 
 	impl.buffer.setCurrent(now)
@@ -156,6 +167,10 @@ func CreateTracer(opts Options) (Tracer, error) {
 	}
 	for builtin, propagator := range opts.Propagators {
 		impl.propagators[builtin] = propagator
+	}
+
+	if !opts.SystemMetrics.Disabled {
+		go impl.systemMetricsLoop()
 	}
 
 	return impl, nil
@@ -223,6 +238,7 @@ func (tracer *tracerImpl) Close(ctx context.Context) {
 	tracer.closeOnce.Do(func() {
 		// notify report loop that we are closing
 		close(tracer.closeReportLoopChannel)
+		close(tracer.closeSystemMetricsLoopChannel)
 		select {
 		case <-tracer.reportLoopClosedChannel:
 			tracer.Flush(ctx)
@@ -444,6 +460,28 @@ func (tracer *tracerImpl) reportLoop() {
 			}
 		case <-tracer.closeReportLoopChannel:
 			close(tracer.reportLoopClosedChannel)
+			return
+		}
+	}
+}
+
+func (tracer *tracerImpl) systemMetricsLoop() {
+	ticker := time.NewTicker(tracer.metricsMeasurementFrequency)
+
+	for {
+		select {
+		case <-ticker.C:
+			if tracer.disabled {
+				return
+			}
+
+			ctx, cancel := context.WithTimeout(context.Background(), tracer.metricsMeasurementFrequency)
+			defer cancel()
+
+			if err := tracer.metricsReporter.Measure(ctx); err != nil {
+				emitEvent(newEventSystemMetricsMeasurementFailed(err))
+			}
+		case <-tracer.closeSystemMetricsLoopChannel:
 			return
 		}
 	}
