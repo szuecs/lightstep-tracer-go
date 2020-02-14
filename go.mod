@@ -12,3 +12,5 @@ require (
 	go.opencensus.io v0.20.2
 	google.golang.org/grpc v1.21.0
 )
+
+replace github.com/lightstep/lightstep-tracer-common/golang/gogo => github.com/iredelmeier/lightstep-tracer-common/golang/gogo v0.0.0-20200214014507-d2a48926e0a9
