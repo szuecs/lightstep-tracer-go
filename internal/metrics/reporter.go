@@ -78,6 +78,7 @@ func (r *Reporter) Measure(ctx context.Context) error {
 			Seconds: start.Unix(),
 			Nanos:   int32(start.Nanosecond()),
 		},
+		// TODO: how do we want to handle duration?
 		Duration: &types.Duration{
 			Seconds: 0,
 			Nanos:   0,
@@ -88,6 +89,28 @@ func (r *Reporter) Measure(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+
+	// TODO: ewwwww
+	pb.Points = append(pb.Points, &metricspb.MetricPoint{
+		Kind:          metricspb.MetricKind_GAUGE,
+		TimeSeriesKey: fmt.Sprintf("cpu.user"),
+		Labels: map[string]string{
+			"name": "process.cpu",
+		},
+		Value: &metricspb.MetricPoint_Float{
+			Float: m.ProcessCPU.User,
+		},
+	})
+	pb.Points = append(pb.Points, &metricspb.MetricPoint{
+		Kind:          metricspb.MetricKind_GAUGE,
+		TimeSeriesKey: fmt.Sprintf("cpu.system"),
+		Labels: map[string]string{
+			"name": "process.cpu",
+		},
+		Value: &metricspb.MetricPoint_Float{
+			Float: m.ProcessCPU.System,
+		},
+	})
 
 	for label, cpu := range m.CPU {
 		labels := map[string]string{
@@ -100,6 +123,38 @@ func (r *Reporter) Measure(ctx context.Context) error {
 			Labels:        labels,
 			Value: &metricspb.MetricPoint_Float{
 				Float: cpu.User,
+			},
+		})
+		pb.Points = append(pb.Points, &metricspb.MetricPoint{
+			Kind:          metricspb.MetricKind_GAUGE,
+			TimeSeriesKey: fmt.Sprintf("cpu.system"),
+			Labels:        labels,
+			Value: &metricspb.MetricPoint_Float{
+				Float: cpu.System,
+			},
+		})
+		pb.Points = append(pb.Points, &metricspb.MetricPoint{
+			Kind:          metricspb.MetricKind_GAUGE,
+			TimeSeriesKey: fmt.Sprintf("cpu.idle"),
+			Labels:        labels,
+			Value: &metricspb.MetricPoint_Float{
+				Float: cpu.Idle,
+			},
+		})
+		pb.Points = append(pb.Points, &metricspb.MetricPoint{
+			Kind:          metricspb.MetricKind_GAUGE,
+			TimeSeriesKey: fmt.Sprintf("cpu.steal"),
+			Labels:        labels,
+			Value: &metricspb.MetricPoint_Float{
+				Float: cpu.Steal,
+			},
+		})
+		pb.Points = append(pb.Points, &metricspb.MetricPoint{
+			Kind:          metricspb.MetricKind_GAUGE,
+			TimeSeriesKey: fmt.Sprintf("cpu.nice"),
+			Labels:        labels,
+			Value: &metricspb.MetricPoint_Float{
+				Float: cpu.Nice,
 			},
 		})
 	}
