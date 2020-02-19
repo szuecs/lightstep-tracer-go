@@ -17,7 +17,8 @@ import (
 )
 
 const (
-	DefaultReporterAddress             = "https://metricingest.lightstep.com"
+	// DefaultReporterAddress             = "https://metricingest.lightstep.com"
+	DefaultReporterAddress             = "http://localhost:9876"
 	DefaultReporterTimeout             = time.Second * 5
 	DefaultReporterMeasurementDuration = time.Second * 30
 )
@@ -51,7 +52,7 @@ func NewReporter(opts ...ReporterOption) *Reporter {
 		client:     &http.Client{},
 		tracerID:   c.tracerID,
 		attributes: c.attributes,
-		address:    c.address,
+		address:    fmt.Sprintf("%s%s", c.address, reporterPath),
 		timeout:    c.timeout,
 		// duration:    c.duration,
 		accessToken: c.accessToken,
@@ -75,7 +76,7 @@ func (r *Reporter) Measure(ctx context.Context) error {
 		Labels:         r.attributes,
 		Start: &types.Timestamp{
 			Seconds: start.Unix(),
-			Nanos:   int32(start.UnixNano()),
+			Nanos:   int32(start.Nanosecond()),
 		},
 		Duration: &types.Duration{
 			Seconds: 0,
