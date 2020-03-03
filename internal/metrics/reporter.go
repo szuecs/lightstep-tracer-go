@@ -81,6 +81,28 @@ func (r *Reporter) prepareRequest(m Metrics) (*metricspb.IngestRequest, error) {
 	}, nil
 }
 
+func addFloat(labels map[string]string, key string, value float64) *metricspb.MetricPoint {
+	return &metricspb.MetricPoint{
+		Kind:          metricspb.MetricKind_GAUGE,
+		TimeSeriesKey: key,
+		Labels:        labels,
+		Value: &metricspb.MetricPoint_Float{
+			Float: value,
+		},
+	}
+}
+
+func addUint(labels map[string]string, key string, value uint64) *metricspb.MetricPoint {
+	return &metricspb.MetricPoint{
+		Kind:          metricspb.MetricKind_GAUGE,
+		TimeSeriesKey: key,
+		Labels:        labels,
+		Value: &metricspb.MetricPoint_Uint{
+			Uint: value,
+		},
+	}
+}
+
 // Measure takes a snapshot of system metrics and sends them
 // to a LightStep endpoint.
 func (r *Reporter) Measure(ctx context.Context) error {
@@ -96,116 +118,36 @@ func (r *Reporter) Measure(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	// TODO: ewwwww
-	pb.Points = append(pb.Points, &metricspb.MetricPoint{
-		Kind:          metricspb.MetricKind_GAUGE,
-		TimeSeriesKey: fmt.Sprintf("cpu.user"),
-		Labels: map[string]string{
-			"name": "process.cpu",
-		},
-		Value: &metricspb.MetricPoint_Float{
-			Float: m.ProcessCPU.User,
-		},
-	})
-	pb.Points = append(pb.Points, &metricspb.MetricPoint{
-		Kind:          metricspb.MetricKind_GAUGE,
-		TimeSeriesKey: fmt.Sprintf("cpu.system"),
-		Labels: map[string]string{
-			"name": "process.cpu",
-		},
-		Value: &metricspb.MetricPoint_Float{
-			Float: m.ProcessCPU.System,
-		},
-	})
-	pb.Points = append(pb.Points, &metricspb.MetricPoint{
-		Kind:          metricspb.MetricKind_GAUGE,
-		TimeSeriesKey: fmt.Sprintf("mem.available"),
-		Labels: map[string]string{
-			"name": "mem.available",
-		},
-		Value: &metricspb.MetricPoint_Uint{
-			Uint: m.Memory.Available,
-		},
-	})
-	pb.Points = append(pb.Points, &metricspb.MetricPoint{
-		Kind:          metricspb.MetricKind_GAUGE,
-		TimeSeriesKey: fmt.Sprintf("mem.used"),
-		Labels: map[string]string{
-			"name": "mem.used",
-		},
-		Value: &metricspb.MetricPoint_Uint{
-			Uint: m.Memory.Used,
-		},
-	})
+
+	labels := map[string]string{
+		"name": "process.cpu",
+	}
+	pb.Points = append(pb.Points, addFloat(labels, "cpu.user", m.ProcessCPU.User))
+	pb.Points = append(pb.Points, addFloat(labels, "cpu.system", m.ProcessCPU.System))
+
+	labels = map[string]string{
+		"name": "mem",
+	}
+	pb.Points = append(pb.Points, addUint(labels, "mem.available", m.Memory.Available))
+	pb.Points = append(pb.Points, addUint(labels, "mem.used", m.Memory.Used))
 
 	for label, cpu := range m.CPU {
 		labels := map[string]string{
 			"name": label,
 		}
 
-		pb.Points = append(pb.Points, &metricspb.MetricPoint{
-			Kind:          metricspb.MetricKind_GAUGE,
-			TimeSeriesKey: fmt.Sprintf("cpu.user"),
-			Labels:        labels,
-			Value: &metricspb.MetricPoint_Float{
-				Float: cpu.User,
-			},
-		})
-		pb.Points = append(pb.Points, &metricspb.MetricPoint{
-			Kind:          metricspb.MetricKind_GAUGE,
-			TimeSeriesKey: fmt.Sprintf("cpu.system"),
-			Labels:        labels,
-			Value: &metricspb.MetricPoint_Float{
-				Float: cpu.System,
-			},
-		})
-		pb.Points = append(pb.Points, &metricspb.MetricPoint{
-			Kind:          metricspb.MetricKind_GAUGE,
-			TimeSeriesKey: fmt.Sprintf("cpu.idle"),
-			Labels:        labels,
-			Value: &metricspb.MetricPoint_Float{
-				Float: cpu.Idle,
-			},
-		})
-		pb.Points = append(pb.Points, &metricspb.MetricPoint{
-			Kind:          metricspb.MetricKind_GAUGE,
-			TimeSeriesKey: fmt.Sprintf("cpu.steal"),
-			Labels:        labels,
-			Value: &metricspb.MetricPoint_Float{
-				Float: cpu.Steal,
-			},
-		})
-		pb.Points = append(pb.Points, &metricspb.MetricPoint{
-			Kind:          metricspb.MetricKind_GAUGE,
-			TimeSeriesKey: fmt.Sprintf("cpu.nice"),
-			Labels:        labels,
-			Value: &metricspb.MetricPoint_Float{
-				Float: cpu.Nice,
-			},
-		})
+		pb.Points = append(pb.Points, addFloat(labels, "cpu.system", cpu.System))
+		pb.Points = append(pb.Points, addFloat(labels, "cpu.user", cpu.User))
+		pb.Points = append(pb.Points, addFloat(labels, "cpu.idle", cpu.Idle))
+		pb.Points = append(pb.Points, addFloat(labels, "cpu.steal", cpu.Steal))
+		pb.Points = append(pb.Points, addFloat(labels, "cpu.nice", cpu.Nice))
 	}
 	for label, nic := range m.NIC {
 		labels := map[string]string{
 			"name": label,
 		}
-
-		pb.Points = append(pb.Points, &metricspb.MetricPoint{
-			Kind:          metricspb.MetricKind_GAUGE,
-			TimeSeriesKey: fmt.Sprintf("net.recv"),
-			Labels:        labels,
-			Value: &metricspb.MetricPoint_Uint{
-				Uint: nic.BytesReceived,
-			},
-		})
-
-		pb.Points = append(pb.Points, &metricspb.MetricPoint{
-			Kind:          metricspb.MetricKind_GAUGE,
-			TimeSeriesKey: fmt.Sprintf("net.sent"),
-			Labels:        labels,
-			Value: &metricspb.MetricPoint_Uint{
-				Uint: nic.BytesSent,
-			},
-		})
+		pb.Points = append(pb.Points, addUint(labels, "net.recv", nic.BytesReceived))
+		pb.Points = append(pb.Points, addUint(labels, "net.sent", nic.BytesSent))
 	}
 
 	b, err := proto.Marshal(pb)
