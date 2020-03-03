@@ -5,12 +5,16 @@ import (
 	"os"
 
 	"github.com/shirou/gopsutil/cpu"
+	"github.com/shirou/gopsutil/mem"
+	"github.com/shirou/gopsutil/net"
 	"github.com/shirou/gopsutil/process"
 )
 
 type Metrics struct {
 	ProcessCPU ProcessCPU
 	CPU        map[string]CPU
+	NIC        map[string]NIC
+	Memory     Memory
 }
 
 type ProcessCPU struct {
@@ -26,6 +30,16 @@ type CPU struct {
 	Nice   float64
 }
 
+type NIC struct {
+	BytesReceived uint64
+	BytesSent     uint64
+}
+
+type Memory struct {
+	Available uint64
+	Used      uint64
+}
+
 func Measure(ctx context.Context) (Metrics, error) {
 	p, err := process.NewProcess(int32(os.Getpid())) // TODO: cache the process
 	if err != nil {
@@ -37,7 +51,17 @@ func Measure(ctx context.Context) (Metrics, error) {
 		return Metrics{}, err
 	}
 
-	systemTimes, err := cpu.TimesWithContext(ctx, true)
+	systemTimes, err := cpu.TimesWithContext(ctx, false)
+	if err != nil {
+		return Metrics{}, err
+	}
+
+	netStats, err := net.IOCountersWithContext(context.Background(), false)
+	if err != nil {
+		return Metrics{}, err
+	}
+
+	memStats, err := mem.VirtualMemoryWithContext(ctx)
 	if err != nil {
 		return Metrics{}, err
 	}
@@ -48,6 +72,11 @@ func Measure(ctx context.Context) (Metrics, error) {
 			System: processTimes.System,
 		},
 		CPU: make(map[string]CPU),
+		NIC: make(map[string]NIC),
+		Memory: Memory{
+			Available: memStats.Available,
+			Used:      memStats.Used,
+		},
 	}
 
 	for _, m := range systemTimes {
@@ -57,6 +86,13 @@ func Measure(ctx context.Context) (Metrics, error) {
 			Idle:   m.Idle,
 			Steal:  m.Steal,
 			Nice:   m.Nice,
+		}
+	}
+
+	for _, counters := range netStats {
+		metrics.NIC[counters.Name] = NIC{
+			BytesReceived: counters.BytesRecv,
+			BytesSent:     counters.BytesSent,
 		}
 	}
 

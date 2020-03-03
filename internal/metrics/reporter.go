@@ -59,18 +59,13 @@ func NewReporter(opts ...ReporterOption) *Reporter {
 	}
 }
 
-func (r *Reporter) Measure(ctx context.Context) error {
-	ctx, cancel := context.WithTimeout(ctx, r.timeout)
-	defer cancel()
-
+func (r *Reporter) prepareRequest(m Metrics) (*metricspb.IngestRequest, error) {
 	start := time.Now()
-
 	idempotencyKey, err := generateIdempotencyKey()
 	if err != nil {
-		return err
+		return nil, err
 	}
-
-	pb := &metricspb.IngestRequest{
+	return &metricspb.IngestRequest{
 		IdempotencyKey: idempotencyKey,
 		ReporterId:     r.tracerID,
 		Labels:         r.attributes,
@@ -83,13 +78,24 @@ func (r *Reporter) Measure(ctx context.Context) error {
 			Seconds: 0,
 			Nanos:   0,
 		},
-	}
+	}, nil
+}
+
+// Measure takes a snapshot of system metrics and sends them
+// to a LightStep endpoint.
+func (r *Reporter) Measure(ctx context.Context) error {
+	ctx, cancel := context.WithTimeout(ctx, r.timeout)
+	defer cancel()
 
 	m, err := Measure(ctx)
 	if err != nil {
 		return err
 	}
 
+	pb, err := r.prepareRequest(m)
+	if err != nil {
+		return err
+	}
 	// TODO: ewwwww
 	pb.Points = append(pb.Points, &metricspb.MetricPoint{
 		Kind:          metricspb.MetricKind_GAUGE,
@@ -109,6 +115,26 @@ func (r *Reporter) Measure(ctx context.Context) error {
 		},
 		Value: &metricspb.MetricPoint_Float{
 			Float: m.ProcessCPU.System,
+		},
+	})
+	pb.Points = append(pb.Points, &metricspb.MetricPoint{
+		Kind:          metricspb.MetricKind_GAUGE,
+		TimeSeriesKey: fmt.Sprintf("mem.available"),
+		Labels: map[string]string{
+			"name": "mem.available",
+		},
+		Value: &metricspb.MetricPoint_Uint{
+			Uint: m.Memory.Available,
+		},
+	})
+	pb.Points = append(pb.Points, &metricspb.MetricPoint{
+		Kind:          metricspb.MetricKind_GAUGE,
+		TimeSeriesKey: fmt.Sprintf("mem.used"),
+		Labels: map[string]string{
+			"name": "mem.used",
+		},
+		Value: &metricspb.MetricPoint_Uint{
+			Uint: m.Memory.Used,
 		},
 	})
 
@@ -158,6 +184,29 @@ func (r *Reporter) Measure(ctx context.Context) error {
 			},
 		})
 	}
+	for label, nic := range m.NIC {
+		labels := map[string]string{
+			"name": label,
+		}
+
+		pb.Points = append(pb.Points, &metricspb.MetricPoint{
+			Kind:          metricspb.MetricKind_GAUGE,
+			TimeSeriesKey: fmt.Sprintf("net.recv"),
+			Labels:        labels,
+			Value: &metricspb.MetricPoint_Uint{
+				Uint: nic.BytesReceived,
+			},
+		})
+
+		pb.Points = append(pb.Points, &metricspb.MetricPoint{
+			Kind:          metricspb.MetricKind_GAUGE,
+			TimeSeriesKey: fmt.Sprintf("net.sent"),
+			Labels:        labels,
+			Value: &metricspb.MetricPoint_Uint{
+				Uint: nic.BytesSent,
+			},
+		})
+	}
 
 	b, err := proto.Marshal(pb)
 	if err != nil {
@@ -200,6 +249,7 @@ func WithReporterAttributes(attributes map[string]string) ReporterOption {
 	}
 }
 
+// WithReporterAddress sets the address of the LightStep endpoint
 func WithReporterAddress(address string) ReporterOption {
 	return func(c *config) {
 		c.address = address
@@ -222,6 +272,7 @@ func WithReporterMeasurementDuration(measurementDuration time.Duration) Reporter
 	}
 }
 
+// WithReporterAccessToken sets an access token for communicating with LightStep
 func WithReporterAccessToken(accessToken string) ReporterOption {
 	return func(c *config) {
 		c.accessToken = accessToken
