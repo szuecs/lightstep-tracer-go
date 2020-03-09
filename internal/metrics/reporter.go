@@ -135,6 +135,7 @@ func (r *Reporter) Measure(ctx context.Context) error {
 	}
 	pb.Points = append(pb.Points, addFloat(labels, "runtime.go.cpu.user", m.ProcessCPU.User-r.stored.ProcessCPU.User, start, metricspb.MetricKind_COUNTER))
 	pb.Points = append(pb.Points, addFloat(labels, "runtime.go.cpu.sys", m.ProcessCPU.System-r.stored.ProcessCPU.System, start, metricspb.MetricKind_COUNTER))
+	pb.Points = append(pb.Points, addUint(labels, "runtime.go.gc.count", m.GarbageCollector.NumGC-r.stored.GarbageCollector.NumGC, start, metricspb.MetricKind_COUNTER))
 
 	labels = []*collectorpb.KeyValue{
 		&collectorpb.KeyValue{
@@ -144,6 +145,7 @@ func (r *Reporter) Measure(ctx context.Context) error {
 	}
 	pb.Points = append(pb.Points, addUint(labels, "mem.available", m.Memory.Available, start, metricspb.MetricKind_GAUGE))
 	pb.Points = append(pb.Points, addUint(labels, "mem.total", m.Memory.Used, start, metricspb.MetricKind_GAUGE))
+	pb.Points = append(pb.Points, addUint(labels, "runtime.go.mem.heap_alloc", m.Memory.HeapAlloc, start, metricspb.MetricKind_GAUGE))
 	pb.Points = append(pb.Points, addFloat(labels, "cpu.percent", m.CPUPercent, start, metricspb.MetricKind_GAUGE))
 
 	for label, cpu := range m.CPU {

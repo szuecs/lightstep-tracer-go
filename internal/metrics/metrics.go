@@ -3,6 +3,7 @@ package metrics
 import (
 	"context"
 	"os"
+	"runtime"
 	"time"
 
 	"github.com/shirou/gopsutil/cpu"
@@ -12,11 +13,16 @@ import (
 )
 
 type Metrics struct {
-	ProcessCPU ProcessCPU
-	CPU        map[string]CPU
-	NIC        map[string]NIC
-	Memory     Memory
-	CPUPercent float64
+	ProcessCPU       ProcessCPU
+	CPU              map[string]CPU
+	NIC              map[string]NIC
+	Memory           Memory
+	CPUPercent       float64
+	GarbageCollector GarbageCollector
+}
+
+type GarbageCollector struct {
+	NumGC uint64
 }
 
 type ProcessCPU struct {
@@ -40,6 +46,7 @@ type NIC struct {
 type Memory struct {
 	Available uint64
 	Used      uint64
+	HeapAlloc uint64
 }
 
 func Measure(ctx context.Context, interval time.Duration) (Metrics, error) {
@@ -68,6 +75,12 @@ func Measure(ctx context.Context, interval time.Duration) (Metrics, error) {
 		return Metrics{}, err
 	}
 
+	var rtm runtime.MemStats
+	runtime.ReadMemStats(&rtm)
+	gc := GarbageCollector{
+		NumGC: uint64(rtm.NumGC),
+	}
+
 	memStats, err := mem.VirtualMemoryWithContext(ctx)
 	if err != nil {
 		return Metrics{}, err
@@ -83,7 +96,9 @@ func Measure(ctx context.Context, interval time.Duration) (Metrics, error) {
 		Memory: Memory{
 			Available: memStats.Available,
 			Used:      memStats.Used,
+			HeapAlloc: rtm.HeapAlloc,
 		},
+		GarbageCollector: gc,
 	}
 
 	for _, m := range systemTimes {
