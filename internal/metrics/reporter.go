@@ -171,7 +171,6 @@ func (r *Reporter) Measure(ctx context.Context) error {
 		pb.Points = append(pb.Points, addUint(labels, "net.bytes_sent", nic.BytesSent-r.stored.NIC[label].BytesSent, start, metricspb.MetricKind_COUNTER))
 	}
 
-	fmt.Println(proto.MarshalTextString(pb))
 	b, err := proto.Marshal(pb)
 	if err != nil {
 		return err

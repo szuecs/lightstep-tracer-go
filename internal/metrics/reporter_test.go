@@ -40,8 +40,28 @@ var _ = Describe("Reporter", func() {
 			if !Expect(err).To(BeNil()) {
 				return
 			}
-			// check metrics are present
-			Expect(ingestRequest.GetPoints()).To(HaveLen(11))
+			// check expected metrics are present and of the right type
+			points := ingestRequest.GetPoints()
+
+			expected := map[string]interface{}{
+				"cpu.user":            metricspb.MetricKind_COUNTER,
+				"cpu.sys":             metricspb.MetricKind_COUNTER,
+				"cpu.idle":            metricspb.MetricKind_COUNTER,
+				"cpu.nice":            metricspb.MetricKind_COUNTER,
+				"cpu.steal":           metricspb.MetricKind_COUNTER,
+				"cpu.percent":         metricspb.MetricKind_GAUGE,
+				"net.bytes_sent":      metricspb.MetricKind_COUNTER,
+				"net.bytes_recv":      metricspb.MetricKind_COUNTER,
+				"mem.total":           metricspb.MetricKind_GAUGE,
+				"mem.available":       metricspb.MetricKind_GAUGE,
+				"runtime.go.cpu.user": metricspb.MetricKind_COUNTER,
+				"runtime.go.cpu.sys":  metricspb.MetricKind_COUNTER,
+			}
+			Expect(points).To(HaveLen(len(expected)))
+			for _, point := range points {
+				name := point.GetMetricName()
+				Expect(point.Kind).To(Equal(expected[name]))
+			}
 
 			// TODO: check that we're sending a delta
 		})
