@@ -3,6 +3,7 @@ package metrics
 import (
 	"context"
 	"os"
+	"time"
 
 	"github.com/shirou/gopsutil/cpu"
 	"github.com/shirou/gopsutil/mem"
@@ -15,6 +16,7 @@ type Metrics struct {
 	CPU        map[string]CPU
 	NIC        map[string]NIC
 	Memory     Memory
+	CPUPercent float64
 }
 
 type ProcessCPU struct {
@@ -40,7 +42,7 @@ type Memory struct {
 	Used      uint64
 }
 
-func Measure(ctx context.Context) (Metrics, error) {
+func Measure(ctx context.Context, interval time.Duration) (Metrics, error) {
 	p, err := process.NewProcess(int32(os.Getpid())) // TODO: cache the process
 	if err != nil {
 		return Metrics{}, err
@@ -56,7 +58,12 @@ func Measure(ctx context.Context) (Metrics, error) {
 		return Metrics{}, err
 	}
 
-	netStats, err := net.IOCountersWithContext(context.Background(), false)
+	percentages, err := cpu.PercentWithContext(ctx, interval, false)
+	if err != nil {
+		return Metrics{}, err
+	}
+
+	netStats, err := net.IOCountersWithContext(ctx, false)
 	if err != nil {
 		return Metrics{}, err
 	}
@@ -87,6 +94,10 @@ func Measure(ctx context.Context) (Metrics, error) {
 			Steal:  m.Steal,
 			Nice:   m.Nice,
 		}
+	}
+
+	for _, p := range percentages {
+		metrics.CPUPercent = p
 	}
 
 	for _, counters := range netStats {

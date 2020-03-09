@@ -45,6 +45,7 @@ type Reporter struct {
 	timeout     time.Duration
 	accessToken string
 	stored      Metrics
+	intervals   int
 }
 
 func NewReporter(opts ...ReporterOption) *Reporter {
@@ -58,6 +59,7 @@ func NewReporter(opts ...ReporterOption) *Reporter {
 		timeout:    c.timeout,
 		// duration:    c.duration,
 		accessToken: c.accessToken,
+		intervals:   1,
 	}
 }
 
@@ -72,9 +74,9 @@ func (r *Reporter) prepareRequest(m Metrics) (*metricspb.IngestRequest, error) {
 	}, nil
 }
 
-func addFloat(labels []*collectorpb.KeyValue, key string, value float64, start time.Time) *metricspb.MetricPoint {
+func addFloat(labels []*collectorpb.KeyValue, key string, value float64, start time.Time, kind metricspb.MetricKind) *metricspb.MetricPoint {
 	return &metricspb.MetricPoint{
-		Kind:       metricspb.MetricKind_GAUGE,
+		Kind:       kind,
 		MetricName: key,
 		Labels:     labels,
 		Value: &metricspb.MetricPoint_DoubleValue{
@@ -90,9 +92,9 @@ func addFloat(labels []*collectorpb.KeyValue, key string, value float64, start t
 	}
 }
 
-func addUint(labels []*collectorpb.KeyValue, key string, value uint64, start time.Time) *metricspb.MetricPoint {
+func addUint(labels []*collectorpb.KeyValue, key string, value uint64, start time.Time, kind metricspb.MetricKind) *metricspb.MetricPoint {
 	return &metricspb.MetricPoint{
-		Kind:       metricspb.MetricKind_GAUGE,
+		Kind:       kind,
 		MetricName: key,
 		Labels:     labels,
 		Value: &metricspb.MetricPoint_Uint64Value{
@@ -115,7 +117,7 @@ func (r *Reporter) Measure(ctx context.Context) error {
 	ctx, cancel := context.WithTimeout(ctx, r.timeout)
 	defer cancel()
 
-	m, err := Measure(ctx)
+	m, err := Measure(ctx, 0*time.Second)
 	if err != nil {
 		return err
 	}
@@ -131,8 +133,8 @@ func (r *Reporter) Measure(ctx context.Context) error {
 			Value: &collectorpb.KeyValue_StringValue{StringValue: "process.cpu"},
 		},
 	}
-	pb.Points = append(pb.Points, addFloat(labels, "runtime.go.cpu.user", m.ProcessCPU.User, start))
-	pb.Points = append(pb.Points, addFloat(labels, "runtime.go.cpu.sys", m.ProcessCPU.System, start))
+	pb.Points = append(pb.Points, addFloat(labels, "runtime.go.cpu.user", m.ProcessCPU.User-r.stored.ProcessCPU.User, start, metricspb.MetricKind_COUNTER))
+	pb.Points = append(pb.Points, addFloat(labels, "runtime.go.cpu.sys", m.ProcessCPU.System-r.stored.ProcessCPU.System, start, metricspb.MetricKind_COUNTER))
 
 	labels = []*collectorpb.KeyValue{
 		&collectorpb.KeyValue{
@@ -140,8 +142,9 @@ func (r *Reporter) Measure(ctx context.Context) error {
 			Value: &collectorpb.KeyValue_StringValue{StringValue: "mem"},
 		},
 	}
-	pb.Points = append(pb.Points, addUint(labels, "mem.available", m.Memory.Available, start))
-	pb.Points = append(pb.Points, addUint(labels, "mem.total", m.Memory.Used, start))
+	pb.Points = append(pb.Points, addUint(labels, "mem.available", m.Memory.Available, start, metricspb.MetricKind_GAUGE))
+	pb.Points = append(pb.Points, addUint(labels, "mem.total", m.Memory.Used, start, metricspb.MetricKind_GAUGE))
+	pb.Points = append(pb.Points, addFloat(labels, "cpu.percent", m.CPUPercent, start, metricspb.MetricKind_GAUGE))
 
 	for label, cpu := range m.CPU {
 		labels = []*collectorpb.KeyValue{
@@ -151,11 +154,11 @@ func (r *Reporter) Measure(ctx context.Context) error {
 			},
 		}
 
-		pb.Points = append(pb.Points, addFloat(labels, "cpu.sys", cpu.System, start))
-		pb.Points = append(pb.Points, addFloat(labels, "cpu.user", cpu.User, start))
-		pb.Points = append(pb.Points, addFloat(labels, "cpu.idle", cpu.Idle, start))
-		pb.Points = append(pb.Points, addFloat(labels, "cpu.steal", cpu.Steal, start))
-		pb.Points = append(pb.Points, addFloat(labels, "cpu.nice", cpu.Nice, start))
+		pb.Points = append(pb.Points, addFloat(labels, "cpu.sys", cpu.System-r.stored.CPU[label].System, start, metricspb.MetricKind_COUNTER))
+		pb.Points = append(pb.Points, addFloat(labels, "cpu.user", cpu.User-r.stored.CPU[label].User, start, metricspb.MetricKind_COUNTER))
+		pb.Points = append(pb.Points, addFloat(labels, "cpu.idle", cpu.Idle-r.stored.CPU[label].Idle, start, metricspb.MetricKind_COUNTER))
+		pb.Points = append(pb.Points, addFloat(labels, "cpu.steal", cpu.Steal-r.stored.CPU[label].Steal, start, metricspb.MetricKind_COUNTER))
+		pb.Points = append(pb.Points, addFloat(labels, "cpu.nice", cpu.Nice-r.stored.CPU[label].Nice, start, metricspb.MetricKind_COUNTER))
 	}
 	for label, nic := range m.NIC {
 		labels = []*collectorpb.KeyValue{
@@ -164,10 +167,11 @@ func (r *Reporter) Measure(ctx context.Context) error {
 				Value: &collectorpb.KeyValue_StringValue{StringValue: label},
 			},
 		}
-		pb.Points = append(pb.Points, addUint(labels, "net.bytes_recv", nic.BytesReceived, start))
-		pb.Points = append(pb.Points, addUint(labels, "net.bytes_sent", nic.BytesSent, start))
+		pb.Points = append(pb.Points, addUint(labels, "net.bytes_recv", nic.BytesReceived-r.stored.NIC[label].BytesReceived, start, metricspb.MetricKind_COUNTER))
+		pb.Points = append(pb.Points, addUint(labels, "net.bytes_sent", nic.BytesSent-r.stored.NIC[label].BytesSent, start, metricspb.MetricKind_COUNTER))
 	}
 
+	fmt.Println(proto.MarshalTextString(pb))
 	b, err := proto.Marshal(pb)
 	if err != nil {
 		return err
