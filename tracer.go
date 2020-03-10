@@ -121,10 +121,11 @@ func CreateTracer(opts Options) (Tracer, error) {
 	attributes[TracerPlatformVersionKey] = runtime.Version()
 	attributes[TracerVersionKey] = TracerVersionValue
 
+	tracerID := genSeededGUID()
 	now := time.Now()
 	impl := &tracerImpl{
 		opts:                    opts,
-		reporterID:              genSeededGUID(),
+		reporterID:              tracerID,
 		buffer:                  newSpansBuffer(opts.MaxBufferedSpans),
 		flushing:                newSpansBuffer(opts.MaxBufferedSpans),
 		closeReportLoopChannel:  make(chan struct{}),
@@ -133,9 +134,17 @@ func CreateTracer(opts Options) (Tracer, error) {
 		accessToken:             opts.AccessToken,
 		attributes:              attributes,
 		metricsReporter: metrics.NewReporter(
+			metrics.WithReporterTracerID(tracerID),
 			metrics.WithReporterAccessToken(opts.AccessToken),
 			metrics.WithReporterTimeout(opts.SystemMetrics.Timeout),
 			metrics.WithReporterAddress(opts.SystemMetrics.Endpoint.urlWithoutPath()),
+			metrics.WithReporterAttributes(map[string]string{
+				metrics.ReporterPlatformKey:        TracerPlatformValue,
+				metrics.ReporterPlatformVersionKey: runtime.Version(),
+				metrics.ReporterVersionKey:         TracerVersionValue,
+				HostnameKey:                        attributes[HostnameKey],
+				ComponentNameKey:                   attributes[ComponentNameKey],
+			}),
 		),
 		metricsMeasurementFrequency: opts.SystemMetrics.MeasurementFrequency,
 	}

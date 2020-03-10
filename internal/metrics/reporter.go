@@ -35,31 +35,47 @@ const (
 
 	idempotencyKeyByteLength = 30
 	protoContentType         = "application/octet-stream"
+
+	ReporterPlatformKey        = "lightstep.reporter_platform"
+	ReporterPlatformVersionKey = "lightstep.reporter_platform_version"
+	ReporterVersionKey         = "lightstep.reporter_version"
 )
 
 type Reporter struct {
-	client      *http.Client
-	tracerID    uint64
-	attributes  map[string]string
-	address     string
-	timeout     time.Duration
-	accessToken string
-	stored      Metrics
-	intervals   int
+	client            *http.Client
+	tracerID          uint64
+	attributes        map[string]string
+	address           string
+	timeout           time.Duration
+	accessToken       string
+	stored            Metrics
+	intervals         int
+	collectorReporter *collectorpb.Reporter
+}
+
+func attributesToTags(attributes map[string]string) []*collectorpb.KeyValue {
+	tags := []*collectorpb.KeyValue{}
+	for k, v := range attributes {
+		tags = append(tags, &collectorpb.KeyValue{Key: k, Value: &collectorpb.KeyValue_StringValue{StringValue: v}})
+	}
+	return tags
 }
 
 func NewReporter(opts ...ReporterOption) *Reporter {
 	c := newConfig(opts...)
 
 	return &Reporter{
-		client:     &http.Client{},
-		tracerID:   c.tracerID,
-		attributes: c.attributes,
-		address:    fmt.Sprintf("%s%s", c.address, reporterPath),
-		timeout:    c.timeout,
-		// duration:    c.duration,
+		client:      &http.Client{},
+		tracerID:    c.tracerID,
+		attributes:  c.attributes,
+		address:     fmt.Sprintf("%s%s", c.address, reporterPath),
+		timeout:     c.timeout,
 		accessToken: c.accessToken,
 		intervals:   1,
+		collectorReporter: &collectorpb.Reporter{
+			ReporterId: c.tracerID,
+			Tags:       attributesToTags(c.attributes),
+		},
 	}
 }
 
@@ -70,7 +86,7 @@ func (r *Reporter) prepareRequest(m Metrics) (*metricspb.IngestRequest, error) {
 	}
 	return &metricspb.IngestRequest{
 		IdempotencyKey: idempotencyKey,
-		Reporter:       &collectorpb.Reporter{}, // TODO: fill in the reporter
+		Reporter:       r.collectorReporter,
 	}, nil
 }
 
@@ -173,6 +189,7 @@ func (r *Reporter) Measure(ctx context.Context) error {
 		pb.Points = append(pb.Points, addUint(labels, "net.bytes_sent", nic.BytesSent-r.stored.NIC[label].BytesSent, start, metricspb.MetricKind_COUNTER))
 	}
 
+	// fmt.Println(proto.MarshalTextString(pb))
 	b, err := proto.Marshal(pb)
 	if err != nil {
 		return err
@@ -209,6 +226,7 @@ func WithReporterTracerID(tracerID uint64) ReporterOption {
 
 func WithReporterAttributes(attributes map[string]string) ReporterOption {
 	return func(c *config) {
+		c.attributes = make(map[string]string, len(attributes))
 		for k, v := range attributes {
 			c.attributes[k] = v
 		}
