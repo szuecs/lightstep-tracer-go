@@ -101,11 +101,11 @@ func (e *eventFlushError) State() EventFlushErrorState {
 }
 
 func (e *eventFlushError) String() string {
-	return e.err.Error()
+	return e.Error()
 }
 
 func (e *eventFlushError) Error() string {
-	return e.err.Error()
+	return e.Err().Error()
 }
 
 func (e *eventFlushError) Err() error {
@@ -131,11 +131,11 @@ func (*eventConnectionError) Event()                {}
 func (*eventConnectionError) EventConnectionError() {}
 
 func (e *eventConnectionError) String() string {
-	return e.err.Error()
+	return e.Error()
 }
 
 func (e *eventConnectionError) Error() string {
-	return e.err.Error()
+	return e.Err().Error()
 }
 
 func (e *eventConnectionError) Err() error {
@@ -171,6 +171,22 @@ type EventStatusReport interface {
 	// FlushDuration is the time it took to send the report, including encoding,
 	// buffer rotation, and network time.
 	FlushDuration() time.Duration
+}
+
+// MetricEventStatusReport occurs every time metrics are sent successfully.. It
+// contains all metrics collected since the previous successful flush.
+type MetricEventStatusReport interface {
+	Event
+	MetricEventStatusReport()
+
+	// StartTime is the earliest time a span was added to the report buffer.
+	StartTime() time.Time
+
+	// FinishTime is the latest time a span was added to the report buffer.
+	FinishTime() time.Time
+
+	// SentMetrics is the number of metrics sent in the report buffer.
+	SentMetrics() int
 }
 
 type eventStatusReport struct {
@@ -270,11 +286,11 @@ func (e *eventUnsupportedTracer) Tracer() opentracing.Tracer {
 }
 
 func (e *eventUnsupportedTracer) String() string {
-	return e.err.Error()
+	return e.Error()
 }
 
 func (e *eventUnsupportedTracer) Error() string {
-	return e.err.Error()
+	return e.Err().Error()
 }
 
 func (e *eventUnsupportedTracer) Err() error {
@@ -322,11 +338,11 @@ func (e *eventUnsupportedValue) Value() interface{} {
 }
 
 func (e *eventUnsupportedValue) String() string {
-	return e.err.Error()
+	return e.Error()
 }
 
 func (e *eventUnsupportedValue) Error() string {
-	return e.err.Error()
+	return e.Err().Error()
 }
 
 func (e *eventUnsupportedValue) Err() error {
@@ -352,4 +368,73 @@ func (eventTracerDisabled) Event()               {}
 func (eventTracerDisabled) EventTracerDisabled() {}
 func (eventTracerDisabled) String() string {
 	return tracerDisabled
+}
+
+type EventSystemMetricsMeasurementFailed interface {
+	ErrorEvent
+}
+
+type eventSystemMetricsMeasurementFailed struct {
+	err error
+}
+
+func newEventSystemMetricsMeasurementFailed(err error) *eventSystemMetricsMeasurementFailed {
+	return &eventSystemMetricsMeasurementFailed{
+		err: err,
+	}
+}
+
+func (e *eventSystemMetricsMeasurementFailed) Event() {}
+
+func (e *eventSystemMetricsMeasurementFailed) String() string {
+	return e.Error()
+}
+
+func (e *eventSystemMetricsMeasurementFailed) Error() string {
+	return e.Err().Error()
+}
+
+func (e *eventSystemMetricsMeasurementFailed) Err() error {
+	return e.err
+}
+
+type eventSystemMetricsStatusReport struct {
+	startTime   time.Time
+	finishTime  time.Time
+	sentMetrics int
+}
+
+func newEventSystemMetricsStatusReport(
+	startTime, finishTime time.Time,
+	sentMetrics int,
+) *eventSystemMetricsStatusReport {
+	return &eventSystemMetricsStatusReport{
+		startTime:   startTime,
+		finishTime:  finishTime,
+		sentMetrics: sentMetrics,
+	}
+}
+
+func (e *eventSystemMetricsStatusReport) Event() {}
+
+func (e *eventSystemMetricsStatusReport) MetricEventStatusReport() {}
+
+func (e *eventSystemMetricsStatusReport) String() string {
+	return fmt.Sprint(
+		"METRICS STATUS REPORT start: ", e.startTime,
+		", end: ", e.finishTime,
+		", sent metrics: ", e.sentMetrics,
+	)
+}
+
+func (e *eventSystemMetricsStatusReport) StartTime() time.Time {
+	return e.startTime
+}
+
+func (e *eventSystemMetricsStatusReport) FinishTime() time.Time {
+	return e.finishTime
+}
+
+func (e *eventSystemMetricsStatusReport) SentMetrics() int {
+	return e.sentMetrics
 }

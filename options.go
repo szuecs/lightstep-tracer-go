@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time" // N.B.(jmacd): Do not use google.golang.org/glog in this package.
 
+	"github.com/lightstep/lightstep-tracer-go/constants"
 	"github.com/opentracing/opentracing-go"
 	"google.golang.org/grpc"
 )
@@ -19,6 +20,11 @@ const (
 	DefaultPlainPort         = 80
 	DefaultSecurePort        = 443
 	DefaultGRPCCollectorHost = "collector-grpc.lightstep.com"
+
+	DefaultSystemMetricsHost = "ingest.lightstep.com"
+
+	DefaultSystemMetricsMeasurementFrequency = 30 * time.Second
+	DefaultSystemMetricsTimeout              = 5 * time.Second
 
 	DefaultMaxReportingPeriod = 2500 * time.Millisecond
 	DefaultMinReportingPeriod = 500 * time.Millisecond
@@ -35,11 +41,12 @@ const (
 
 // Tag and Tracer Attribute keys.
 const (
-	ParentSpanGUIDKey = "parent_span_guid" // ParentSpanGUIDKey is the tag key used to record the relationship between child and parent spans.
-	ComponentNameKey  = "lightstep.component_name"
-	GUIDKey           = "lightstep.guid" // <- runtime guid, not span guid
-	HostnameKey       = "lightstep.hostname"
+	ParentSpanGUIDKey = "parent_span_guid"         // ParentSpanGUIDKey is the tag key used to record the relationship between child and parent spans.
+	ComponentNameKey  = constants.ComponentNameKey // NOTE: these will be deprecated in favour of the constants package
+	GUIDKey           = "lightstep.guid"           // <- runtime guid, not span guid
+	HostnameKey       = constants.HostnameKey      // NOTE: these will be deprecated in favour of the constants package
 	CommandLineKey    = "lightstep.command_line"
+	ServiceVersionKey = constants.ServiceVersionKey // NOTE: these will be deprecated in favour of the constants package
 
 	TracerPlatformKey        = "lightstep.tracer_platform"
 	TracerPlatformValue      = "go"
@@ -104,6 +111,13 @@ func (e Endpoint) scheme() string {
 	}
 
 	return secureScheme
+}
+
+type SystemMetricsOptions struct {
+	Disabled             bool          `yaml:"disabled"`
+	Endpoint             Endpoint      `yaml:"endpoint"`
+	MeasurementFrequency time.Duration `yaml:"measurement_frequency"`
+	Timeout              time.Duration `yaml:"timeout"`
 }
 
 // Options control how the LightStep Tracer behaves.
@@ -198,6 +212,8 @@ type Options struct {
 
 	// Enable LightStep Meta Event Logging
 	MetaEventReportingEnabled bool `yaml:"meta_event_reporting_enabled" json:"meta_event_reporting_enabled"`
+
+	SystemMetrics SystemMetricsOptions `yaml:"system_metrics"`
 }
 
 // Initialize validates options, and sets default values for unset options.
@@ -241,12 +257,12 @@ func (opts *Options) Initialize() error {
 	}
 
 	// Set some default attributes if not found in options
-	if _, found := opts.Tags[ComponentNameKey]; !found {
-		opts.Tags[ComponentNameKey] = path.Base(os.Args[0])
+	if _, found := opts.Tags[constants.ComponentNameKey]; !found {
+		opts.Tags[constants.ComponentNameKey] = path.Base(os.Args[0])
 	}
-	if _, found := opts.Tags[HostnameKey]; !found {
+	if _, found := opts.Tags[constants.HostnameKey]; !found {
 		hostname, _ := os.Hostname()
-		opts.Tags[HostnameKey] = hostname
+		opts.Tags[constants.HostnameKey] = hostname
 	}
 	if _, found := opts.Tags[CommandLineKey]; !found {
 		opts.Tags[CommandLineKey] = strings.Join(os.Args, " ")
@@ -266,6 +282,26 @@ func (opts *Options) Initialize() error {
 		}
 	}
 
+	if opts.SystemMetrics.Endpoint.Host == "" {
+		opts.SystemMetrics.Endpoint.Host = DefaultSystemMetricsHost
+	}
+
+	if opts.SystemMetrics.Endpoint.Port <= 0 {
+		opts.SystemMetrics.Endpoint.Port = DefaultSecurePort
+
+		if opts.SystemMetrics.Endpoint.Plaintext {
+			opts.SystemMetrics.Endpoint.Port = DefaultPlainPort
+		}
+	}
+
+	if opts.SystemMetrics.MeasurementFrequency <= 0 {
+		opts.SystemMetrics.MeasurementFrequency = DefaultSystemMetricsMeasurementFrequency
+	}
+
+	if opts.SystemMetrics.Timeout <= 0 {
+		opts.SystemMetrics.Timeout = DefaultSystemMetricsTimeout
+	}
+
 	return nil
 }
 
@@ -281,6 +317,13 @@ func (opts *Options) Validate() error {
 			return err
 		}
 	}
+
+	if !opts.SystemMetrics.Disabled && len(opts.SystemMetrics.Endpoint.CustomCACertFile) != 0 {
+		if _, err := os.Stat(opts.SystemMetrics.Endpoint.CustomCACertFile); os.IsNotExist(err) {
+			return err
+		}
+	}
+
 	return nil
 }
 
