@@ -4,7 +4,9 @@ package lightstep
 import (
 	"context"
 	"fmt"
+	"os"
 	"runtime"
+	"strings"
 	"sync"
 	"time"
 
@@ -181,7 +183,9 @@ func CreateTracer(opts Options) (Tracer, error) {
 		impl.propagators[builtin] = propagator
 	}
 
-	if !opts.SystemMetrics.Disabled {
+	// allow disabling of system metrics via environment variable:
+	// LS_METRICS_ENABLED=false
+	if !opts.SystemMetrics.Disabled && strings.ToLower(os.Getenv("LS_METRICS_ENABLED")) != "false" {
 		go impl.systemMetricsLoop()
 	}
 
