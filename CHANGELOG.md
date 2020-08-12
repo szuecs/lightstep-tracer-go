@@ -1,6 +1,8 @@
 # Changelog
 
 ## [Pending Release](https://github.com/lightstep/lightstep-tracer-go/compare/v0.20.0...HEAD)
+
+## [v0.21.0](https://github.com/lightstep/lightstep-tracer-go/compare/v0.20.0...v0.21.0)
 * Allow users to disable metrics via environment variable: `LS_METRICS_ENABLED=false`
 
 ## [v0.20.0](https://github.com/lightstep/lightstep-tracer-go/compare/v0.19.0...v0.20.0)
