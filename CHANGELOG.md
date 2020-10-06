@@ -1,6 +1,10 @@
 # Changelog
 
-## [Pending Release](https://github.com/lightstep/lightstep-tracer-go/compare/v0.20.0...HEAD)
+## [Pending Release](https://github.com/lightstep/lightstep-tracer-go/compare/v0.22.0...HEAD)
+
+## [v0.22.0](https://github.com/lightstep/lightstep-tracer-go/compare/v0.21.0...v0.22.0)
+* Propagate the sampled flag, and use it to determine whether or not to report spans
+* Fix bug where trace IDs were not correctly truncated
 
 ## [v0.21.0](https://github.com/lightstep/lightstep-tracer-go/compare/v0.20.0...v0.21.0)
 * Allow users to disable metrics via environment variable: `LS_METRICS_ENABLED=false`
