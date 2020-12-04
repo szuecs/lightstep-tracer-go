@@ -5,11 +5,42 @@ import (
 )
 
 type reportBuffer struct {
-	rawSpans             []RawSpan
-	droppedSpanCount     int64
+	rawSpans []RawSpan
+
+	// droppedSpanCount is the total number of spans that have been dropped
+	// (either because the buffer was full when the span arrived or because a report
+	// failed and there wasn't sufficient room to re-enqueue the spans back into the
+	// following report).
+	//
+	// This counter increases continually until is has successfully been reported
+	// to the telemetry provider by being attached to a report that doesn't return
+	// an error.
+	droppedSpanCount int64
+	// reportedDroppedSpanCount is a counter that tracks the cumulative value of what
+	// has been reported to the service through an event status report. This should
+	// always be smaller than droppedSpanCount because droppedSpanCount is monotonically
+	// increasing and this only represents the value reported in the past.
+	// To determine what to report in the next event status report, subtract the previously
+	// reported value from the updated dropped spans count (see reportDroppedSpanCount).
+	reportedDroppedSpanCount int64
+
+	// droppedSpanCount is the total number of spans thgco at have been rejected
+	// because of a log encoder error.
+	//
+	// This counter increases continually until is has successfully been reported
+	// to the telemetry provider by being attached to a report that doesn't return
+	// an error.
 	logEncoderErrorCount int64
-	reportStart          time.Time
-	reportEnd            time.Time
+	// reportedLogEncoderErrorCount is a counter that tracks the cumulative value of what
+	// has been reported to the service through an event status report. This should
+	// always be smaller than logEncoderErrorCount because logEncoderErrorCount is monotonically
+	// increasing and this only represents the value reported in the past.
+	// To determine what to report in the next event status report, subtract the previously
+	// reported value from the updated dropped spans count (see reportLogEncoderErrorCount).
+	reportedLogEncoderErrorCount int64
+
+	reportStart time.Time
+	reportEnd   time.Time
 }
 
 func newSpansBuffer(size int) (b reportBuffer) {
@@ -37,7 +68,9 @@ func (b *reportBuffer) clear() {
 	b.reportStart = time.Time{}
 	b.reportEnd = time.Time{}
 	b.droppedSpanCount = 0
+	b.reportedDroppedSpanCount = 0
 	b.logEncoderErrorCount = 0
+	b.reportedLogEncoderErrorCount = 0
 }
 
 func (b *reportBuffer) addSpan(span RawSpan) {
@@ -53,7 +86,9 @@ func (b *reportBuffer) addSpan(span RawSpan) {
 // combined data.
 func (b *reportBuffer) mergeFrom(from *reportBuffer) {
 	b.droppedSpanCount += from.droppedSpanCount
+	b.reportedDroppedSpanCount += from.reportedDroppedSpanCount
 	b.logEncoderErrorCount += from.logEncoderErrorCount
+	b.reportedLogEncoderErrorCount += from.reportedLogEncoderErrorCount
 	if from.reportStart.Before(b.reportStart) {
 		b.reportStart = from.reportStart
 	}
@@ -76,4 +111,24 @@ func (b *reportBuffer) mergeFrom(from *reportBuffer) {
 	b.droppedSpanCount += int64(unreported - space)
 
 	from.clear()
+}
+
+func (b *reportBuffer) reportDroppedSpanCount() int64 {
+	// Get the delta of what has been dropped since the last report.
+	toReport := b.droppedSpanCount - b.reportedDroppedSpanCount
+
+	// Update the reported number so that the next time report is called, it won't double count.
+	b.reportedDroppedSpanCount = b.droppedSpanCount
+
+	return toReport
+}
+
+func (b *reportBuffer) reportLogEncoderErrorCount() int64 {
+	// Get the delta of what has been dropped since the last report.
+	toReport := b.logEncoderErrorCount - b.reportedLogEncoderErrorCount
+
+	// Update the reported number so that the next time report is called, it won't double count.
+	b.reportedLogEncoderErrorCount = b.logEncoderErrorCount
+
+	return toReport
 }

@@ -396,8 +396,8 @@ func (tracer *tracerImpl) postFlush(flushStart time.Time, flushEventError *event
 		tracer.flushing.reportStart,
 		tracer.flushing.reportEnd,
 		len(tracer.flushing.rawSpans),
-		int(tracer.flushing.droppedSpanCount+tracer.buffer.droppedSpanCount),
-		int(tracer.flushing.logEncoderErrorCount+tracer.buffer.logEncoderErrorCount),
+		int(tracer.flushing.reportDroppedSpanCount()+tracer.buffer.reportDroppedSpanCount()),
+		int(tracer.flushing.reportLogEncoderErrorCount()+tracer.buffer.reportLogEncoderErrorCount()),
 		time.Now().Sub(flushStart),
 	)
 
