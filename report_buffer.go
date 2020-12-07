@@ -1,6 +1,7 @@
 package lightstep
 
 import (
+	"fmt"
 	"time"
 )
 
@@ -89,6 +90,7 @@ func (b *reportBuffer) mergeFrom(from *reportBuffer) {
 	b.reportedDroppedSpanCount += from.reportedDroppedSpanCount
 	b.logEncoderErrorCount += from.logEncoderErrorCount
 	b.reportedLogEncoderErrorCount += from.reportedLogEncoderErrorCount
+
 	if from.reportStart.Before(b.reportStart) {
 		b.reportStart = from.reportStart
 	}
@@ -108,27 +110,22 @@ func (b *reportBuffer) mergeFrom(from *reportBuffer) {
 
 	b.rawSpans = append(b.rawSpans, from.rawSpans[0:space]...)
 
+	if int64(unreported-space) > 0 {
+		fmt.Println("HERE!", unreported, space, len(b.rawSpans), cap(b.rawSpans))
+	}
 	b.droppedSpanCount += int64(unreported - space)
 
 	from.clear()
 }
 
 func (b *reportBuffer) reportDroppedSpanCount() int64 {
-	// Get the delta of what has been dropped since the last report.
-	toReport := b.droppedSpanCount - b.reportedDroppedSpanCount
-
-	// Update the reported number so that the next time report is called, it won't double count.
-	b.reportedDroppedSpanCount = b.droppedSpanCount
-
+	var toReport int64
+	toReport, b.reportedDroppedSpanCount = b.droppedSpanCount-b.reportedDroppedSpanCount, b.droppedSpanCount
 	return toReport
 }
 
 func (b *reportBuffer) reportLogEncoderErrorCount() int64 {
-	// Get the delta of what has been dropped since the last report.
-	toReport := b.logEncoderErrorCount - b.reportedLogEncoderErrorCount
-
-	// Update the reported number so that the next time report is called, it won't double count.
-	b.reportedLogEncoderErrorCount = b.logEncoderErrorCount
-
+	var toReport int64
+	toReport, b.reportedLogEncoderErrorCount = b.logEncoderErrorCount-b.reportedLogEncoderErrorCount, b.droppedSpanCount
 	return toReport
 }

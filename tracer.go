@@ -387,24 +387,28 @@ func (tracer *tracerImpl) preFlush() *eventFlushError {
 
 // postFlush handles lock-protected data manipulation after flushing
 func (tracer *tracerImpl) postFlush(flushStart time.Time, flushEventError *eventFlushError) *eventStatusReport {
+
 	tracer.lock.Lock()
 	defer tracer.lock.Unlock()
 
+	flushEnd := time.Now()
+
 	tracer.reportInFlight = false
 
-	statusReportEvent := newEventStatusReport(
-		tracer.flushing.reportStart,
-		tracer.flushing.reportEnd,
-		len(tracer.flushing.rawSpans),
-		int(tracer.flushing.reportDroppedSpanCount()+tracer.buffer.reportDroppedSpanCount()),
-		int(tracer.flushing.reportLogEncoderErrorCount()+tracer.buffer.reportLogEncoderErrorCount()),
-		time.Now().Sub(flushStart),
-	)
-
 	if flushEventError == nil {
+		statusReportEvent := newEventStatusReport(
+			tracer.flushing.reportStart,
+			tracer.flushing.reportEnd,
+			len(tracer.flushing.rawSpans),
+			int(tracer.flushing.reportDroppedSpanCount()),
+			int(tracer.flushing.reportLogEncoderErrorCount()),
+			flushEnd.Sub(flushStart),
+		)
 		tracer.flushing.clear()
 		return statusReportEvent
 	}
+
+	reportStart, reportEnd := tracer.flushing.reportStart, tracer.flushing.reportEnd
 
 	switch flushEventError.State() {
 	case FlushErrorTranslate:
@@ -415,7 +419,14 @@ func (tracer *tracerImpl) postFlush(flushStart time.Time, flushEventError *event
 		tracer.buffer.mergeFrom(&tracer.flushing)
 	}
 
-	statusReportEvent.SetSentSpans(0)
+	statusReportEvent := newEventStatusReport(
+		reportStart,
+		reportEnd,
+		0,
+		int(tracer.buffer.reportDroppedSpanCount()),
+		int(tracer.buffer.reportLogEncoderErrorCount()),
+		flushEnd.Sub(flushStart),
+	)
 
 	return statusReportEvent
 }

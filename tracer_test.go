@@ -34,7 +34,7 @@ var _ = Describe("Tracer", func() {
 
 	var eventHandler func(Event)
 	var eventChan <-chan Event
-	const eventBufferSize = 10
+	const eventBufferSize = 100
 
 	BeforeEach(func() {
 		opts.UseGRPC = true
@@ -62,6 +62,7 @@ var _ = Describe("Tracer", func() {
 			opts.AccessToken = accessToken
 			opts.ConnFactory = fakeConn
 		})
+
 		It("should emit a warning when the service name is unset", func() {
 			event := <-eventChan
 			ems, ok := event.(EventMissingService)
@@ -375,15 +376,15 @@ var _ = Describe("Tracer", func() {
 			It("should propagate flags from parent to child", func() {
 				opentracing.SetGlobalTracer(tracer)
 
-				opentracing_parent_span := tracer.StartSpan("parent", SetTraceID(1), SetSampled("false"))
-				opentracing_parent_context := opentracing.ContextWithSpan(context.Background(), opentracing_parent_span)
-				opentracing_child_span, _ := opentracing.StartSpanFromContext(opentracing_parent_context, "child")
+				opentracingParentSpan := tracer.StartSpan("parent", SetTraceID(1), SetSampled("false"))
+				opentracingParentContext := opentracing.ContextWithSpan(context.Background(), opentracingParentSpan)
+				opentracingChildSpan, _ := opentracing.StartSpanFromContext(opentracingParentContext, "child")
 
-				lightstep_child_spancontext, _ := opentracing_child_span.Context().(SpanContext)
+				lightstepChildSpanContext, _ := opentracingChildSpan.Context().(SpanContext)
 
-				Expect(lightstep_child_spancontext.Sampled).To(Equal("false"))
-				opentracing_child_span.Finish()
-				opentracing_parent_span.Finish()
+				Expect(lightstepChildSpanContext.Sampled).To(Equal("false"))
+				opentracingChildSpan.Finish()
+				opentracingParentSpan.Finish()
 			})
 		})
 
@@ -489,7 +490,7 @@ var _ = Describe("Tracer", func() {
 			})
 		})
 
-		Context("when there is an error sending spans", func() {
+		Context("when there is one error sending spans", func() {
 			BeforeEach(func() {
 				// set client to fail on the first call, then return normally
 				fakeClient.ReportReturnsOnCall(0, nil, errors.New("fail"))
@@ -499,52 +500,153 @@ var _ = Describe("Tracer", func() {
 			It("should restore the spans that failed to be sent", func() {
 				tracer.StartSpan("if at first you don't succeed...").Finish()
 				tracer.StartSpan("...copy flushing back into your buffer").Finish()
+
 				tracer.Flush(context.Background())
+				Expect(len(getReportedGRPCSpans(fakeClient))).To(Equal(2))
+
 				tracer.Flush(context.Background())
 				Expect(len(getReportedGRPCSpans(fakeClient))).To(Equal(4))
+			})
+
+			It("emits EventFlushError & EventStatusReport", func(done Done) {
+				tracer.Flush(context.Background())
+
+				event := <-eventChan
+				eventFlushError, ok := event.(EventFlushError)
+				Expect(ok).To(BeTrue())
+
+				Expect(eventFlushError.State()).To(Equal(FlushErrorTransport))
+
+				event = <-eventChan
+				dropSpanErr, ok := event.(EventStatusReport)
+				Expect(ok).To(BeTrue())
+
+				Expect(dropSpanErr.FlushDuration()).To(BeNumerically(">", 0))
+				Expect(dropSpanErr.DroppedSpans()).To(BeZero())
+
+				close(done)
+			})
+
+			It("emits exactly two events", func() {
+				tracer.Flush(context.Background())
+
+				Eventually(eventChan).Should(Receive())
+				Eventually(eventChan).Should(Receive())
+				Consistently(eventChan).ShouldNot(Receive())
 			})
 		})
 
 		Context("when a report is in progress", func() {
-			var startReportonce sync.Once
-			var startReportch chan struct{}
-			var finishReportch chan struct{}
+			var startReportOnce sync.Once
+			var startReportCh chan struct{}
+			var finishReportCh chan struct{}
 
 			BeforeEach(func() {
-				finishReportch = make(chan struct{})
-				startReportch = make(chan struct{})
-				startReportonce = sync.Once{}
+				finishReportCh = make(chan struct{})
+				startReportCh = make(chan struct{})
+				startReportOnce = sync.Once{}
 				fakeClient.ReportStub = func(ctx context.Context, req *collectorpb.ReportRequest, options ...grpc.CallOption) (*collectorpb.ReportResponse, error) {
-					startReportonce.Do(func() { close(startReportch) })
-					<-finishReportch
+					startReportOnce.Do(func() { close(startReportCh) })
+					<-finishReportCh
 					return new(collectorpb.ReportResponse), nil
 				}
 			})
 
 			JustBeforeEach(func() {
 				// wait for tracer to have a report in flight
-				Eventually(startReportch).Should(BeClosed())
+				Eventually(startReportCh).Should(BeClosed())
 			})
 
 			It("retries flushing", func() {
 				tracer.StartSpan("these spans should sit in the buffer").Finish()
 				tracer.StartSpan("while the last report is in flight").Finish()
 
-				flushFinishedch := make(chan struct{})
+				flushFinishedCh := make(chan struct{})
 				go func() {
 					Flush(context.Background(), tracer)
-					close(flushFinishedch)
+					close(flushFinishedCh)
 				}()
 				// flush should wait for the last report to finish
-				Consistently(flushFinishedch).ShouldNot(BeClosed())
+				Consistently(flushFinishedCh).ShouldNot(BeClosed())
 				// no spans should have been reported yet
 				Expect(getReportedGRPCSpans(fakeClient)).To(HaveLen(0))
 				// allow the last report to finish
-				close(finishReportch)
+				close(finishReportCh)
 				// flush should now send a report with the last two spans
-				Eventually(flushFinishedch).Should(BeClosed())
+				Eventually(flushFinishedCh).Should(BeClosed())
 				// now the spans that were sitting in the buffer should be reported
 				Expect(getReportedGRPCSpans(fakeClient)).Should(HaveLen(2))
+			})
+		})
+
+		Context("when there is are errors sending spans & more spans are being reported", func() {
+			BeforeEach(func() {
+				once := new(sync.Once)
+				// fakeClient.ReportReturns(nil,  errors.New("fail"))
+				fakeClient.ReportStub = func(
+					ctx context.Context,
+					in *collectorpb.ReportRequest,
+					opts ...grpc.CallOption,
+				) (*collectorpb.ReportResponse, error) {
+					once.Do(func() {
+						for i := 0; i < DefaultMaxSpans; i++ {
+							tracer.StartSpan(fmt.Sprint("span ", i)).Finish()
+						}
+					})
+					return nil, errors.New("fail")
+				}
+			})
+
+			It("should fail to restore the spans that failed to be sent", func() {
+				tracer.StartSpan("if at first you don't succeed...").Finish()
+				tracer.StartSpan("...fail to copy flushing back into your buffer").Finish()
+
+				tracer.Flush(context.Background())
+				Expect(len(getReportedGRPCSpans(fakeClient))).To(Equal(2))
+
+				tracer.Flush(context.Background())
+				Expect(len(getReportedGRPCSpans(fakeClient))).To(Equal(DefaultMaxSpans + 2))
+
+				tracer.Flush(context.Background())
+				Expect(len(getReportedGRPCSpans(fakeClient))).To(Equal(2*DefaultMaxSpans + 2))
+			})
+
+			It("emits EventFlushErrors & EventStatusReports", func(done Done) {
+				expectEvents := func(expectedDroppedSpans int) {
+					event := <-eventChan
+					eventFlushError, ok := event.(EventFlushError)
+					Expect(ok).To(BeTrue())
+
+					Expect(eventFlushError.State()).To(Equal(FlushErrorTransport))
+
+					event = <-eventChan
+					dropSpanErr, ok := event.(EventStatusReport)
+					Expect(ok).To(BeTrue())
+
+					Expect(dropSpanErr.FlushDuration()).To(BeNumerically(">", 0))
+					Expect(dropSpanErr.SentSpans()).To(BeZero())
+					Expect(dropSpanErr.DroppedSpans()).To(Equal(expectedDroppedSpans), event.String())
+					Expect(dropSpanErr.EncodingErrors()).To(BeZero())
+				}
+
+				tracer.Flush(context.Background())
+				expectEvents(2)
+
+				tracer.Flush(context.Background())
+				expectEvents(0)
+
+				tracer.Flush(context.Background())
+				expectEvents(0)
+
+				close(done)
+			})
+
+			It("emits exactly two events", func() {
+				tracer.Flush(context.Background())
+
+				Eventually(eventChan).Should(Receive())
+				Eventually(eventChan).Should(Receive())
+				Consistently(eventChan).ShouldNot(Receive())
 			})
 		})
 	})
