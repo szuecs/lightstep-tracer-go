@@ -122,6 +122,6 @@ func (b *reportBuffer) reportDroppedSpanCount() int64 {
 
 func (b *reportBuffer) reportLogEncoderErrorCount() int64 {
 	var toReport int64
-	toReport, b.reportedLogEncoderErrorCount = b.logEncoderErrorCount-b.reportedLogEncoderErrorCount, b.droppedSpanCount
+	toReport, b.reportedLogEncoderErrorCount = b.logEncoderErrorCount-b.reportedLogEncoderErrorCount, b.logEncoderErrorCount
 	return toReport
 }
