@@ -1,7 +1,6 @@
 package lightstep
 
 import (
-	"fmt"
 	"time"
 )
 
@@ -110,9 +109,6 @@ func (b *reportBuffer) mergeFrom(from *reportBuffer) {
 
 	b.rawSpans = append(b.rawSpans, from.rawSpans[0:space]...)
 
-	if int64(unreported-space) > 0 {
-		fmt.Println("HERE!", unreported, space, len(b.rawSpans), cap(b.rawSpans))
-	}
 	b.droppedSpanCount += int64(unreported - space)
 
 	from.clear()
