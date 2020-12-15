@@ -34,7 +34,7 @@ var _ = Describe("Tracer", func() {
 
 	var eventHandler func(Event)
 	var eventChan <-chan Event
-	const eventBufferSize = 100
+	const eventBufferSize = 10
 
 	BeforeEach(func() {
 		opts.UseGRPC = true
@@ -579,10 +579,9 @@ var _ = Describe("Tracer", func() {
 			})
 		})
 
-		Context("when there is are errors sending spans & more spans are being reported", func() {
+		Context("when there are errors sending spans & more spans are being reported", func() {
 			BeforeEach(func() {
-				once := new(sync.Once)
-				// fakeClient.ReportReturns(nil,  errors.New("fail"))
+				var once sync.Once
 				fakeClient.ReportStub = func(
 					ctx context.Context,
 					in *collectorpb.ReportRequest,

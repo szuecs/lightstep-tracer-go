@@ -24,7 +24,7 @@ type reportBuffer struct {
 	// reported value from the updated dropped spans count (see reportDroppedSpanCount).
 	reportedDroppedSpanCount int64
 
-	// droppedSpanCount is the total number of spans thgco at have been rejected
+	// logEncoderErrorCount is the total number of spans that have been rejected
 	// because of a log encoder error.
 	//
 	// This counter increases continually until is has successfully been reported
@@ -109,7 +109,9 @@ func (b *reportBuffer) mergeFrom(from *reportBuffer) {
 
 	b.rawSpans = append(b.rawSpans, from.rawSpans[0:space]...)
 
-	b.droppedSpanCount += int64(unreported - space)
+	if unreported > space {
+		b.droppedSpanCount += int64(unreported - space)
+	}
 
 	from.clear()
 }
