@@ -611,6 +611,8 @@ var _ = Describe("Tracer", func() {
 			})
 
 			It("emits EventFlushErrors & EventStatusReports", func(done Done) {
+				tracer.StartSpan("if at first you don't succeed...").Finish()
+				tracer.StartSpan("...fail to copy flushing back into your buffer").Finish()
 				expectEvents := func(expectedDroppedSpans int) {
 					event := <-eventChan
 					eventFlushError, ok := event.(EventFlushError)
