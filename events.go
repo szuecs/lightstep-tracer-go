@@ -253,6 +253,7 @@ func (s *eventStatusReport) String() string {
 	return fmt.Sprint(
 		"STATUS REPORT start: ", s.startTime,
 		", end: ", s.finishTime,
+		", send spans: ", s.sentSpans,
 		", dropped spans: ", s.droppedSpans,
 		", encoding errors: ", s.encodingErrors,
 	)
@@ -450,7 +451,7 @@ type eventMissingService struct {
 }
 
 func newEventMissingService(defaultService string) *eventMissingService {
-	return &eventMissingService{defaultService:defaultService}
+	return &eventMissingService{defaultService: defaultService}
 }
 
 func (e *eventMissingService) Event() {}
