@@ -44,7 +44,11 @@ func (p textMapPropagator) Inject(
 	}
 	carrier.Set(p.traceIDKey, p.traceID)
 	carrier.Set(p.spanIDKey, p.spanID)
-	carrier.Set(p.sampledKey, p.sampled)
+	if len(p.sampled) > 0 {
+		carrier.Set(p.sampledKey, p.sampled)
+	} else {
+		carrier.Set(p.sampledKey, "true")
+	}
 
 	for k, v := range sc.Baggage {
 		carrier.Set(prefixBaggage+k, v)

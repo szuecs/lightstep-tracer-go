@@ -74,6 +74,48 @@ var _ = Describe("Propagator Stack", func() {
 			Expect(spanContext.Sampled).To(Equal(knownContext1.Sampled))
 		})
 	})
+	Context("With an empty sampled flag", func() {
+		var knownCarrier1 opentracing.TextMapCarrier
+
+		var knownContext1 = SpanContext{
+			SpanID:  6397081719746291766,
+			TraceID: 506100417967962170,
+			Baggage: map[string]string{"checked": "baggage"},
+		}
+		BeforeEach(func() {
+			knownCarrier1 = opentracing.TextMapCarrier{}
+			stack = PropagatorStack{}
+			stack.PushPropagator(LightStepPropagator)
+		})
+
+		It("should inject trace", func() {
+			err := stack.Inject(knownContext1, knownCarrier1)
+			Expect(err).To(BeNil())
+			Expect(len(knownCarrier1)).To(Equal(4))
+			Expect(knownCarrier1["ot-tracer-traceid"]).To(Equal("70607a611a8383a"))
+			Expect(knownCarrier1["ot-tracer-spanid"]).To(Equal("58c6ffee509f6836"))
+			Expect(knownCarrier1["ot-tracer-sampled"]).To(Equal("true"))
+			Expect(knownCarrier1["ot-baggage-checked"]).To(Equal("baggage"))
+		})
+
+		It("should extract trace", func() {
+			knownCarrier2 := opentracing.TextMapCarrier{
+				"ot-tracer-traceid":  "70607a611a8383a",
+				"ot-tracer-spanid":   "58c6ffee509f6836",
+				"ot-tracer-sampled":  "true",
+				"ot-baggage-checked": "baggage",
+			}
+			ctx, err := stack.Extract(knownCarrier2)
+			Expect(err).To(BeNil())
+			// check if spancontext is correct
+			spanContext, _ := ctx.(SpanContext)
+
+			Expect(spanContext.TraceID).To(Equal(knownContext1.TraceID))
+			Expect(spanContext.SpanID).To(Equal(knownContext1.SpanID))
+			Expect(spanContext.Baggage).To(Equal(knownContext1.Baggage))
+			Expect(spanContext.Sampled).To(Equal("true"))
+		})
+	})
 	Context("With multiple propagator", func() {
 		var knownCarrier1 opentracing.TextMapCarrier
 
