@@ -2,6 +2,7 @@
 
 ## [Pending Release](https://github.com/lightstep/lightstep-tracer-go/compare/v0.22.0...HEAD)
 
+* Fix issue where the `ot-tracer-sampled` header was propagated as an empty string if it was not explicitly set [#269]
 ## [v0.23.0](https://github.com/lightstep/lightstep-tracer-go/compare/v0.22.0...v0.23.0)
 * Only emit spans dropped within a status interval in the status event report [#265](https://github.com/lightstep/lightstep-tracer-go/pull/265)
 * Generate uint64 trace IDs, instead of int64 [#267](https://github.com/lightstep/lightstep-tracer-go/pull/267)
