@@ -2,7 +2,6 @@ package lightstep
 
 import (
 	"log"
-	"sync"
 	"sync/atomic"
 )
 
@@ -62,16 +61,12 @@ func NewEventLogOneError() EventHandler {
 	return logger.OnEvent
 }
 
-type logOneError struct {
-	sync.Once
-}
+type logOneError struct{}
 
 func (l *logOneError) OnEvent(event Event) {
 	switch event := event.(type) {
 	case ErrorEvent:
-		l.Once.Do(func() {
-			log.Printf("LS Tracer error: (%s). NOTE: Set the SetGlobalEventHandler handler to log events.\n", event.Error())
-		})
+		log.Printf("LS Tracer error: (%s). NOTE: Set the SetGlobalEventHandler handler to log events.\n", event.Error())
 	}
 }
 
