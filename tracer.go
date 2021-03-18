@@ -4,8 +4,8 @@ package lightstep
 import (
 	"context"
 	"fmt"
-	"os"
 	"math/rand"
+	"os"
 	"runtime"
 	"strings"
 	"sync"
@@ -320,29 +320,28 @@ func (tracer *tracerImpl) Flush(ctx context.Context) {
 		tracer.firstReportHasRun = true
 	}
 
+	parts := 1
 	numOfRawSpans := len(tracer.flushing.rawSpans)
-	if numOfRawSpans == 0 {
-		return
-	}
-
-	heuristicByteSize := 0
-	for i:= 0; i < 2; i++ {
-		pivot := rand.New(rand.NewSource(time.Now().UnixNano())).Int() % numOfRawSpans
-		h := tracer.flushing.rawSpans[pivot].Len() * numOfRawSpans
-		if h > heuristicByteSize {
-			heuristicByteSize = h
+	if numOfRawSpans > 0 {
+		var heuristicByteSize int
+		if numOfRawSpans == 1 {
+			heuristicByteSize = tracer.flushing.rawSpans[0].Len()
+		} else {
+			for i := 0; i < 2; i++ {
+				pivot := rand.New(rand.NewSource(time.Now().UnixNano())).Int() % numOfRawSpans
+				h := tracer.flushing.rawSpans[pivot].Len() * numOfRawSpans
+				if h > heuristicByteSize {
+					heuristicByteSize = h
+				}
+			}
 		}
-	}
 
-	var parts int
-	if heuristicByteSize > tracer.opts.GRPCMaxCallSendMsgSizeBytes {
-		parts = heuristicByteSize / tracer.opts.GRPCMaxCallSendMsgSizeBytes
-		if heuristicByteSize % tracer.opts.GRPCMaxCallSendMsgSizeBytes != 0 {
-			parts += 1
+		if heuristicByteSize > tracer.opts.GRPCMaxCallSendMsgSizeBytes {
+			parts = heuristicByteSize / tracer.opts.GRPCMaxCallSendMsgSizeBytes
+			if heuristicByteSize%tracer.opts.GRPCMaxCallSendMsgSizeBytes != 0 {
+				parts += 1
+			}
 		}
-	}
-	if parts == 0 {
-		return
 	}
 
 	protoReq := tracer.converter.toReportRequest(
