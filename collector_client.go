@@ -38,13 +38,14 @@ type reportRequest struct {
 // SplitByParts splits reportRequest into given number of parts.
 // Beware, that parts=0 panics.
 func (rr reportRequest) SplitByParts(parts int) []reportRequest {
-	spans := rr.protoRequest.Spans
-	if len(spans) == 0 {
+
+	if rr.protoRequest == nil || len(rr.protoRequest.Spans) == 0 || parts <= 1 {
 		return []reportRequest{rr}
 	}
+	spans := rr.protoRequest.Spans
 
 	maxSize := len(rr.protoRequest.Spans) / parts
-	if len(rr.protoRequest.Spans) % parts > 0 {
+	if len(rr.protoRequest.Spans)%parts > 0 {
 		maxSize++
 	}
 
